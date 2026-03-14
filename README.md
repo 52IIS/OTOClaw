@@ -15,12 +15,6 @@
 
 ***
 
-## 📖 项目背景
-
-本项目基于 GitHub 开源项目 **[OpenClaw Manager](https://github.com/miaoxworld/openclaw-manager)** 进行二次开发（原项目已获得 ⭐ 1.2k Star）。
-
-开发目的是将原项目的 **React 技术栈迁移至 Vue 3 技术栈**，同时作为个人技术学习实践。在保持原有功能完整性的基础上，探索 Vue 3 Composition API、Pinia 状态管理等现代 Vue 生态的最佳实践。
-
 ### 项目名称由来
 
 - **OTOClaw** = **O**ne-**T**ouch **O**pen**Claw**
@@ -28,6 +22,12 @@
 - 中文名称：**一键龙虾**
 
 ***
+
+## 📖 项目背景
+
+本项目基于 GitHub 开源项目 **[OpenClaw Manager](https://github.com/miaoxworld/openclaw-manager)** 进行二次开发（原项目已获得 ⭐ 1.2k Star）。
+
+开发目的是将原项目的 **React 技术栈迁移至 Vue 3 技术栈**，同时作为个人技术学习实践。在保持原有功能完整性的基础上，探索 Vue 3 Composition API、Pinia 状态管理等现代 Vue 生态的最佳实践。
 
 ## 📸 界面预览
 
