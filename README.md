@@ -6,10 +6,10 @@
 
 高性能跨平台 AI 助手管理工具，基于 **Tauri 2.0 + Vue 3 + TypeScript + Rust** 构建。
 
-!\[Platform]\(https\://img.shields.io/badge/platform-macOS%20|%20Windows%20|%20Linux-blue null)
-!\[Tauri]\(https\://img.shields.io/badge/Tauri-2.0-orange null)
-!\[Vue]\(https\://img.shields.io/badge/Vue-3.5-4FC08D null)
-!\[Rust]\(https\://img.shields.io/badge/Rust-1.70+-red null)
+![Platform](https://img.shields.io/badge/platform-macOS%20|%20Windows%20|%20Linux-blue)
+![Tauri](https://img.shields.io/badge/Tauri-2.0-orange)
+![Vue](https://img.shields.io/badge/Vue-3.5-4FC08D)
+![Rust](https://img.shields.io/badge/Rust-1.70+-red)
 
 🌐 **官方网站**: [otoclaw.com](https://otoclaw.com) - 下载服务 | 教程文档 | 社区交流
 
@@ -35,7 +35,7 @@
 
 实时监控服务状态，一键管理 AI 助手服务。
 
-!\[仪表盘]\(pic/dashboard.png null)
+![仪表盘](pic/dashboard.png)
 
 - 服务状态实时监控（端口、进程 ID、内存、运行时间）
 - 快捷操作：启动 / 停止 / 重启 / 诊断
@@ -47,7 +47,7 @@
 
 灵活配置多个 AI 提供商，支持自定义 API 地址。
 
-!\[AI 配置]\(pic/ai.png null)
+![AI 配置](pic/ai.png)
 
 - 支持 14+ AI 提供商（Anthropic、OpenAI、DeepSeek、Moonshot、Gemini 等）
 - 自定义 API 端点，兼容 OpenAI 格式的第三方服务
