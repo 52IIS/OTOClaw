@@ -346,6 +346,19 @@ fn get_windows_openclaw_paths() -> Vec<String> {
     // 3. Program Files 下的 nodejs
     paths.push("C:\\Program Files\\nodejs\\openclaw.cmd".to_string());
     
+    // 4. 通过 where node 查找 node 安装位置后拼接 openclaw.cmd
+    if let Ok(output) = run_cmd_output("where node") {
+        for line in output.lines() {
+            let node_path = line.trim();
+            if !node_path.is_empty() {
+                if let Some(parent) = std::path::Path::new(node_path).parent() {
+                    let openclaw_path = format!("{}\\openclaw.cmd", parent.display());
+                    paths.push(openclaw_path);
+                }
+            }
+        }
+    }
+    
     paths
 }
 
