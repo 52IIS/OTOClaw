@@ -11,62 +11,19 @@ import {
   CheckCircle,
   XCircle,
   Cpu,
+  ChevronDown,
+  Pencil,
+  Trash2,
 } from 'lucide-vue-next'
 import clsx from 'clsx'
 import { aiLogger } from '../../lib/logger'
-
-interface OfficialProvider {
-  id: string
-  name: string
-  icon: string
-  default_base_url: string | null
-  api_type: string
-  suggested_models: SuggestedModel[]
-  requires_api_key: boolean
-  docs_url: string | null
-}
-
-interface SuggestedModel {
-  id: string
-  name: string
-  description: string | null
-  context_window: number | null
-  max_tokens: number | null
-  recommended: boolean
-}
-
-interface ConfiguredProvider {
-  name: string
-  base_url: string
-  api_key_masked: string | null
-  has_api_key: boolean
-  models: ConfiguredModel[]
-}
-
-interface ConfiguredModel {
-  full_id: string
-  id: string
-  name: string
-  api_type: string | null
-  context_window: number | null
-  max_tokens: number | null
-  is_primary: boolean
-}
-
-interface AIConfigOverview {
-  primary_model: string | null
-  configured_providers: ConfiguredProvider[]
-  available_models: string[]
-}
-
-interface AITestResult {
-  success: boolean
-  provider: string
-  model: string
-  response: string | null
-  error: string | null
-  latency_ms: number | null
-}
+import ProviderDialog from './ProviderDialog.vue'
+import type {
+  OfficialProvider,
+  ConfiguredProvider,
+  AIConfigOverview,
+  AITestResult,
+} from './types'
 
 const loading = ref(true)
 const officialProviders = ref<OfficialProvider[]>([])
@@ -76,6 +33,9 @@ const testing = ref(false)
 const testResult = ref<AITestResult | null>(null)
 
 const expandedProviders = ref<Set<string>>(new Set())
+
+const showAddDialog = ref(false)
+const editingProvider = ref<ConfiguredProvider | null>(null)
 
 const loadData = async () => {
   aiLogger.info('AIConfig 组件加载数据...')
@@ -147,11 +107,23 @@ const getProviderIcon = (provider: ConfiguredProvider) => {
 }
 
 const handleAddProvider = () => {
-  alert('添加 Provider 功能将在后续版本中完善')
+  editingProvider.value = null
+  showAddDialog.value = true
 }
 
 const handleEditProvider = (provider: ConfiguredProvider) => {
-  alert(`编辑 Provider: ${provider.name} 功能将在后续版本中完善`)
+  editingProvider.value = provider
+  showAddDialog.value = true
+}
+
+const handleCloseDialog = () => {
+  showAddDialog.value = false
+  editingProvider.value = null
+}
+
+const handleDialogSave = () => {
+  loadData()
+  handleCloseDialog()
 }
 
 const handleDeleteProvider = async (providerName: string) => {
@@ -166,33 +138,33 @@ const handleDeleteProvider = async (providerName: string) => {
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto scroll-container pr-2">
-    <div class="max-w-4xl space-y-6">
+  <div class="overflow-y-auto pr-2 h-full scroll-container">
+    <div class="space-y-6 max-w-4xl">
       <Transition name="fade">
-        <div v-if="error" class="bg-red-500/20 border border-red-500/50 rounded-xl p-4 text-red-300">
-          <p class="font-medium mb-1">加载配置失败</p>
+        <div v-if="error" class="p-4 text-red-300 rounded-xl border bg-red-500/20 border-red-500/50">
+          <p class="mb-1 font-medium">加载配置失败</p>
           <p class="text-sm text-red-400">{{ error }}</p>
-          <button @click="loadData" class="mt-2 text-sm text-red-300 hover:text-white underline">重试</button>
+          <button @click="loadData" class="mt-2 text-sm text-red-300 underline hover:text-white">重试</button>
         </div>
       </Transition>
 
-      <div class="bg-gradient-to-br from-dark-700 to-dark-800 rounded-2xl p-6 border border-dark-500">
-        <div class="flex items-start justify-between mb-4">
+      <div class="p-6 bg-gradient-to-br rounded-2xl border from-dark-700 to-dark-800 border-dark-500">
+        <div class="flex justify-between items-start mb-4">
           <div>
-            <h2 class="text-xl font-semibold text-white flex items-center gap-2">
+            <h2 class="flex gap-2 items-center text-xl font-semibold text-white">
               <Sparkles :size="22" class="text-claw-400" />
               AI 模型配置
             </h2>
-            <p class="text-sm text-gray-500 mt-1">管理 OpenClaw 使用的 AI Provider 和模型</p>
+            <p class="mt-1 text-sm text-gray-500">管理 OpenClaw 使用的 AI Provider 和模型</p>
           </div>
-          <button @click="handleAddProvider" class="btn-primary flex items-center gap-2">
+          <button @click="handleAddProvider" class="flex gap-2 items-center btn-primary">
             <Plus :size="16" />
             添加 Provider
           </button>
         </div>
 
-        <div class="bg-dark-600/50 rounded-xl p-4 flex items-center gap-4">
-          <div class="w-12 h-12 rounded-xl bg-claw-500/20 flex items-center justify-center">
+        <div class="flex gap-4 items-center p-4 rounded-xl bg-dark-600/50">
+          <div class="flex justify-center items-center w-12 h-12 rounded-xl bg-claw-500/20">
             <Star :size="24" class="text-claw-400" />
           </div>
           <div class="flex-1">
@@ -200,11 +172,11 @@ const handleDeleteProvider = async (providerName: string) => {
             <p v-if="aiConfig?.primary_model" class="text-lg font-medium text-white">{{ aiConfig.primary_model }}</p>
             <p v-else class="text-lg text-gray-500">未设置</p>
           </div>
-          <div class="text-right mr-4">
+          <div class="mr-4 text-right">
             <p class="text-sm text-gray-500">{{ aiConfig?.configured_providers.length || 0 }} 个 Provider</p>
             <p class="text-sm text-gray-500">{{ aiConfig?.available_models.length || 0 }} 个可用模型</p>
           </div>
-          <button @click="runAITest" :disabled="testing || !aiConfig?.primary_model" class="btn-secondary flex items-center gap-2">
+          <button @click="runAITest" :disabled="testing || !aiConfig?.primary_model" class="flex gap-2 items-center btn-secondary">
             <Loader2 v-if="testing" :size="16" class="animate-spin" />
             <Zap v-else :size="16" />
             测试连接
@@ -213,7 +185,7 @@ const handleDeleteProvider = async (providerName: string) => {
 
         <Transition name="fade">
           <div v-if="testResult" :class="['mt-4 p-4 rounded-xl', testResult.success ? 'bg-green-500/10 border border-green-500/30' : 'bg-red-500/10 border border-red-500/30']">
-            <div class="flex items-center gap-3 mb-2">
+            <div class="flex gap-3 items-center mb-2">
               <CheckCircle v-if="testResult.success" :size="20" class="text-green-400" />
               <XCircle v-else :size="20" class="text-red-400" />
               <div class="flex-1">
@@ -222,14 +194,14 @@ const handleDeleteProvider = async (providerName: string) => {
                 </p>
                 <p v-if="testResult.latency_ms" class="text-xs text-gray-400">响应时间: {{ testResult.latency_ms }}ms</p>
               </div>
-              <button @click="testResult = null" class="text-gray-500 hover:text-white text-sm">关闭</button>
+              <button @click="testResult = null" class="text-sm text-gray-500 hover:text-white">关闭</button>
             </div>
-            <div v-if="testResult.response" class="mt-2 p-3 bg-dark-700 rounded-lg">
-              <p class="text-xs text-gray-400 mb-1">AI 响应:</p>
+            <div v-if="testResult.response" class="p-3 mt-2 rounded-lg bg-dark-700">
+              <p class="mb-1 text-xs text-gray-400">AI 响应:</p>
               <p class="text-sm text-white whitespace-pre-wrap">{{ testResult.response }}</p>
             </div>
-            <div v-if="testResult.error" class="mt-2 p-3 bg-red-500/10 rounded-lg">
-              <p class="text-xs text-red-400 mb-1">错误信息:</p>
+            <div v-if="testResult.error" class="p-3 mt-2 rounded-lg bg-red-500/10">
+              <p class="mb-1 text-xs text-red-400">错误信息:</p>
               <p class="text-sm text-red-300 whitespace-pre-wrap">{{ testResult.error }}</p>
             </div>
           </div>
@@ -237,46 +209,47 @@ const handleDeleteProvider = async (providerName: string) => {
       </div>
 
       <div class="space-y-4">
-        <h3 class="text-lg font-medium text-white flex items-center gap-2">
+        <h3 class="flex gap-2 items-center text-lg font-medium text-white">
           <Server :size="18" class="text-gray-500" />
           已配置的 Provider
         </h3>
 
-        <div v-if="aiConfig?.configured_providers.length === 0" class="bg-dark-700 rounded-xl border border-dark-500 p-8 text-center">
-          <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-600 flex items-center justify-center">
+        <div v-if="aiConfig?.configured_providers.length === 0" class="p-8 text-center rounded-xl border bg-dark-700 border-dark-500">
+          <div class="flex justify-center items-center mx-auto mb-4 w-16 h-16 rounded-full bg-dark-600">
             <Plus :size="24" class="text-gray-500" />
           </div>
-          <p class="text-gray-400 mb-4">还没有配置任何 AI Provider</p>
+          <p class="mb-4 text-gray-400">还没有配置任何 AI Provider</p>
           <button @click="handleAddProvider" class="btn-primary">添加第一个 Provider</button>
         </div>
 
         <div v-else class="space-y-3">
-          <div v-for="provider in aiConfig?.configured_providers" :key="provider.name" class="bg-dark-700 rounded-xl border border-dark-500 overflow-hidden">
-            <div class="flex items-center gap-3 p-4 cursor-pointer hover:bg-dark-600/50 transition-colors" @click="toggleProviderExpand(provider.name)">
+          <div v-for="provider in aiConfig?.configured_providers" :key="provider.name" class="overflow-hidden rounded-xl border bg-dark-700 border-dark-500">
+            <div class="flex gap-3 items-center p-4 transition-colors cursor-pointer hover:bg-dark-600/50" @click="toggleProviderExpand(provider.name)">
               <span class="text-xl">{{ getProviderIcon(provider) }}</span>
               <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2">
+                <div class="flex gap-2 items-center">
                   <h3 class="font-medium text-white">{{ provider.name }}</h3>
-                  <span v-if="provider.has_api_key" class="px-1.5 py-0.5 bg-green-500/20 text-green-400 text-xs rounded">已配置</span>
+                  <span v-if="provider.has_api_key" class="px-1.5 py-0.5 text-xs text-green-400 rounded bg-green-500/20">已配置</span>
                 </div>
                 <p class="text-xs text-gray-500 truncate">{{ provider.base_url }}</p>
               </div>
-              <div class="flex items-center gap-2">
+              <div class="flex gap-2 items-center">
                 <span class="text-sm text-gray-500">{{ provider.models.length }} 模型</span>
+                <ChevronDown :size="18" class="text-gray-500 transition-transform" :class="{ 'rotate-180': expandedProviders.has(provider.name) }" />
               </div>
             </div>
 
             <Transition name="expand">
               <div v-show="expandedProviders.has(provider.name)" class="border-t border-dark-600">
                 <div class="p-4 space-y-3">
-                  <div v-if="provider.api_key_masked" class="flex items-center gap-2 text-sm">
+                  <div v-if="provider.api_key_masked" class="flex gap-2 items-center text-sm">
                     <span class="text-gray-500">API Key:</span>
-                    <code class="px-2 py-0.5 bg-dark-600 rounded text-gray-400">{{ provider.api_key_masked }}</code>
+                    <code class="px-2 py-0.5 text-gray-400 rounded bg-dark-600">{{ provider.api_key_masked }}</code>
                   </div>
 
                   <div class="space-y-2">
                     <div v-for="model in provider.models" :key="model.full_id" :class="clsx('flex items-center justify-between p-3 rounded-lg border transition-all', model.is_primary ? 'bg-claw-500/10 border-claw-500/50' : 'bg-dark-600 border-dark-500')">
-                      <div class="flex items-center gap-3">
+                      <div class="flex gap-3 items-center">
                         <Cpu :size="16" :class="model.is_primary ? 'text-claw-400' : 'text-gray-500'" />
                         <div>
                           <p :class="['text-sm font-medium', model.is_primary ? 'text-white' : 'text-gray-300']">
@@ -288,13 +261,19 @@ const handleDeleteProvider = async (providerName: string) => {
                           <p class="text-xs text-gray-500">{{ model.full_id }}</p>
                         </div>
                       </div>
-                      <button v-if="!model.is_primary" @click.stop="handleSetPrimary(model.full_id)" class="text-xs text-gray-500 hover:text-claw-400 transition-colors">设为主模型</button>
+                      <button v-if="!model.is_primary" @click.stop="handleSetPrimary(model.full_id)" class="text-xs text-gray-500 transition-colors hover:text-claw-400">设为主模型</button>
                     </div>
                   </div>
 
-                  <div class="flex justify-end gap-4 pt-2">
-                    <button @click.stop="handleEditProvider(provider)" class="flex items-center gap-1 text-sm text-claw-400 hover:text-claw-300 transition-colors">编辑</button>
-                    <button @click.stop="handleDeleteProvider(provider.name)" class="flex items-center gap-1 text-sm text-red-400 hover:text-red-300 transition-colors">删除</button>
+                  <div class="flex gap-4 justify-end pt-2">
+                    <button @click.stop="handleEditProvider(provider)" class="flex gap-1 items-center text-sm transition-colors text-claw-400 hover:text-claw-300">
+                      <Pencil :size="14" />
+                      编辑 Provider
+                    </button>
+                    <button @click.stop="handleDeleteProvider(provider.name)" class="flex gap-1 items-center text-sm text-red-400 transition-colors hover:text-red-300">
+                      <Trash2 :size="14" />
+                      删除 Provider
+                    </button>
                   </div>
                 </div>
               </div>
@@ -304,12 +283,12 @@ const handleDeleteProvider = async (providerName: string) => {
       </div>
 
       <div v-if="aiConfig && aiConfig.available_models.length > 0" class="space-y-4">
-        <h3 class="text-lg font-medium text-white flex items-center gap-2">
+        <h3 class="flex gap-2 items-center text-lg font-medium text-white">
           <Cpu :size="18" class="text-gray-500" />
           可用模型列表
           <span class="text-sm font-normal text-gray-500">({{ aiConfig.available_models.length }} 个)</span>
         </h3>
-        <div class="bg-dark-700 rounded-xl border border-dark-500 p-4">
+        <div class="p-4 rounded-xl border bg-dark-700 border-dark-500">
           <div class="flex flex-wrap gap-2">
             <span v-for="modelId in aiConfig.available_models" :key="modelId" :class="['inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm', modelId === aiConfig.primary_model ? 'bg-claw-500/20 text-claw-300 border border-claw-500/30' : 'bg-dark-600 text-gray-300']">
               <Star v-if="modelId === aiConfig.primary_model" :size="12" />
@@ -319,9 +298,9 @@ const handleDeleteProvider = async (providerName: string) => {
         </div>
       </div>
 
-      <div class="bg-dark-700/50 rounded-xl p-4 border border-dark-500">
-        <h4 class="text-sm font-medium text-gray-400 mb-2">配置说明</h4>
-        <ul class="text-sm text-gray-500 space-y-1">
+      <div class="p-4 rounded-xl border bg-dark-700/50 border-dark-500">
+        <h4 class="mb-2 text-sm font-medium text-gray-400">配置说明</h4>
+        <ul class="space-y-1 text-sm text-gray-500">
           <li>• Provider 配置保存在 <code class="text-claw-400">~/.openclaw/openclaw.json</code></li>
           <li>• 支持官方 Provider（Anthropic、OpenAI、Kimi 等）和自定义 OpenAI/Anthropic 兼容 API</li>
           <li>• 主模型用于 Agent 的默认推理，可随时切换</li>
@@ -329,6 +308,18 @@ const handleDeleteProvider = async (providerName: string) => {
         </ul>
       </div>
     </div>
+
+    <Teleport to="body">
+      <Transition name="fade">
+        <ProviderDialog
+          v-if="showAddDialog"
+          :official-providers="officialProviders"
+          :editing-provider="editingProvider"
+          @close="handleCloseDialog"
+          @save="handleDialogSave"
+        />
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
