@@ -17,6 +17,7 @@ import {
 } from 'lucide-vue-next'
 import clsx from 'clsx'
 import { aiLogger } from '../../lib/logger'
+import { useDialog } from '../../composables/useDialog'
 import ProviderDialog from './ProviderDialog.vue'
 import type {
   OfficialProvider,
@@ -24,6 +25,8 @@ import type {
   AIConfigOverview,
   AITestResult,
 } from './types'
+
+const { alert, confirm } = useDialog()
 
 const loading = ref(true)
 const officialProviders = ref<OfficialProvider[]>([])
@@ -87,7 +90,7 @@ const handleSetPrimary = async (modelId: string) => {
     await invoke('set_primary_model', { modelId })
     loadData()
   } catch (e) {
-    alert('设置失败: ' + e)
+    await alert('设置失败: ' + e, { variant: 'error', title: '设置失败' })
   }
 }
 
@@ -127,12 +130,18 @@ const handleDialogSave = () => {
 }
 
 const handleDeleteProvider = async (providerName: string) => {
-  if (!confirm(`确定要删除 Provider "${providerName}" 吗？`)) return
+  const confirmed = await confirm(`确定要删除 Provider "${providerName}" 吗？`, {
+    title: '删除确认',
+    variant: 'warning',
+    confirmText: '删除',
+    cancelText: '取消'
+  })
+  if (!confirmed) return
   try {
     await invoke('delete_provider', { providerName })
     loadData()
   } catch (e) {
-    alert('删除失败: ' + e)
+    await alert('删除失败: ' + e, { variant: 'error', title: '删除失败' })
   }
 }
 </script>

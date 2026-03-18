@@ -9,10 +9,14 @@ import Channels from './components/Channels/index.vue'
 import Settings from './components/Settings/index.vue'
 import Testing from './components/Testing/index.vue'
 import Logs from './components/Logs/index.vue'
+import Dialog from './components/Dialog.vue'
+import { useDialog } from './composables/useDialog'
 import { appLogger } from './lib/logger'
 import { isTauri } from './lib/tauri'
 import { Download, X, Loader2, CheckCircle, AlertCircle } from 'lucide-vue-next'
 import type { PageType, EnvironmentStatus, ServiceStatus, UpdateInfo, UpdateResult } from './vite-env.d'
+
+const { state: dialogState, handleConfirm, handleCancel } = useDialog()
 
 const currentPage = ref<PageType>('dashboard')
 const isReady = ref<boolean | null>(null)
@@ -136,26 +140,26 @@ const currentComponent = computed(() => {
 </script>
 
 <template>
-  <div v-if="isReady === null" class="flex h-screen bg-dark-900 items-center justify-center">
-    <div class="fixed inset-0 bg-gradient-radial pointer-events-none" />
+  <div v-if="isReady === null" class="flex justify-center items-center h-screen bg-dark-900">
+    <div class="fixed inset-0 pointer-events-none bg-gradient-radial" />
     <div class="relative z-10 text-center">
-      <div class="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-gradient-to-br from-brand-500 to-purple-600 mb-4 animate-pulse">
+      <div class="inline-flex justify-center items-center mb-4 w-16 h-16 bg-gradient-to-br to-purple-600 rounded-xl animate-pulse from-brand-500">
         <span class="text-3xl">🦞</span>
       </div>
       <p class="text-dark-400">正在启动...</p>
     </div>
   </div>
 
-  <div v-else class="flex h-screen bg-dark-900 overflow-hidden">
-    <div class="fixed inset-0 bg-gradient-radial pointer-events-none" />
+  <div v-else class="flex overflow-hidden h-screen bg-dark-900">
+    <div class="fixed inset-0 pointer-events-none bg-gradient-radial" />
     
     <Transition name="slide-down">
       <div
         v-if="showUpdateBanner && updateInfo?.update_available"
-        class="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-claw-600 to-purple-600 shadow-lg"
+        class="fixed top-0 right-0 left-0 z-50 bg-gradient-to-r to-purple-600 shadow-lg from-claw-600"
       >
-        <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div class="flex items-center gap-3">
+        <div class="flex justify-between items-center px-4 py-3 mx-auto max-w-4xl">
+          <div class="flex gap-3 items-center">
             <CheckCircle v-if="updateResult?.success" :size="20" class="text-green-300" />
             <AlertCircle v-else-if="updateResult && !updateResult.success" :size="20" class="text-red-300" />
             <Download v-else :size="20" class="text-white" />
@@ -176,12 +180,12 @@ const currentComponent = computed(() => {
             </div>
           </div>
           
-          <div class="flex items-center gap-2">
+          <div class="flex gap-2 items-center">
             <button
               v-if="!updateResult"
               @click="handleUpdate"
               :disabled="updating"
-              class="px-4 py-1.5 bg-white/20 hover:bg-white/30 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+              class="flex gap-2 items-center px-4 py-1.5 text-sm font-medium text-white rounded-lg transition-colors bg-white/20 hover:bg-white/30 disabled:opacity-50"
             >
               <Loader2 v-if="updating" :size="14" class="animate-spin" />
               <Download v-else :size="14" />
@@ -189,7 +193,7 @@ const currentComponent = computed(() => {
             </button>
             <button
               @click="showUpdateBanner = false; updateResult = null"
-              class="p-1.5 hover:bg-white/20 rounded-lg transition-colors text-white/70 hover:text-white"
+              class="p-1.5 rounded-lg transition-colors hover:bg-white/20 text-white/70 hover:text-white"
             >
               <X :size="16" />
             </button>
@@ -204,10 +208,10 @@ const currentComponent = computed(() => {
       @navigate="handleNavigate"
     />
     
-    <div class="flex-1 flex flex-col overflow-hidden">
+    <div class="flex overflow-hidden flex-col flex-1">
       <Header :current-page="currentPage" />
       
-      <main class="flex-1 overflow-hidden p-6">
+      <main class="overflow-hidden flex-1 p-6">
         <Transition name="fade-slide" mode="out-in">
           <component
             :is="currentComponent"
@@ -219,6 +223,13 @@ const currentComponent = computed(() => {
         </Transition>
       </main>
     </div>
+    
+    <Dialog
+      :visible="dialogState.visible"
+      :options="dialogState.options"
+      @confirm="handleConfirm"
+      @cancel="handleCancel"
+    />
   </div>
 </template>
 

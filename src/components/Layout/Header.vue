@@ -32,6 +32,7 @@ const handleOpenDashboard = async () => {
   opening.value = true
   try {
     const url = await invoke<string>('get_dashboard_url')
+    console.log('打开 Dashboard URL:', url)
     await open(url)
   } catch (e) {
     console.error('打开 Dashboard 失败:', e)
@@ -43,16 +44,16 @@ const handleOpenDashboard = async () => {
 </script>
 
 <template>
-  <header class="h-14 bg-dark-800/50 border-b border-dark-600 flex items-center justify-between px-6 titlebar-drag backdrop-blur-sm">
+  <header class="flex justify-between items-center px-6 h-14 border-b backdrop-blur-sm bg-dark-800/50 border-dark-600 titlebar-drag">
     <div class="titlebar-no-drag">
       <h2 class="text-lg font-semibold text-white">{{ currentTitle.title }}</h2>
       <p class="text-xs text-gray-500">{{ currentTitle.description }}</p>
     </div>
 
-    <div class="flex items-center gap-2 titlebar-no-drag">
+    <div class="flex gap-2 items-center titlebar-no-drag">
       <button
         @click="handleRefresh"
-        class="icon-button text-gray-400 hover:text-white"
+        class="text-gray-400 icon-button hover:text-white"
         title="刷新"
       >
         <RefreshCw :size="16" />
@@ -60,7 +61,7 @@ const handleOpenDashboard = async () => {
       <button
         @click="handleOpenDashboard"
         :disabled="opening"
-        class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-dark-600 hover:bg-dark-500 text-sm text-gray-300 hover:text-white transition-colors disabled:opacity-50"
+        class="flex gap-2 items-center px-3 py-1.5 text-sm text-gray-300 rounded-lg transition-colors bg-dark-600 hover:bg-dark-500 hover:text-white disabled:opacity-50"
         title="打开 Web Dashboard"
       >
         <Loader2 v-if="opening" :size="14" class="animate-spin" />

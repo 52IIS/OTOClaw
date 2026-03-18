@@ -25,6 +25,9 @@ import {
   Trash2,
 } from 'lucide-vue-next'
 import clsx from 'clsx'
+import { useDialog } from '../../composables/useDialog'
+
+const { alert } = useDialog()
 
 interface FeishuPluginStatus {
   installed: boolean
@@ -232,10 +235,10 @@ const handleInstallFeishuPlugin = async () => {
   feishuPluginInstalling.value = true
   try {
     const result = await invoke<string>('install_feishu_plugin')
-    alert(result)
+    await alert(result, { title: '安装结果', variant: 'success' })
     await checkFeishuPlugin()
   } catch (e) {
-    alert('安装失败: ' + e)
+    await alert('安装失败: ' + e, { title: '安装失败', variant: 'error' })
   } finally {
     feishuPluginInstalling.value = false
   }
@@ -330,9 +333,12 @@ const handleWhatsAppLogin = async () => {
       loginLoading.value = false
     }, 60000)
     
-    alert('请在弹出的终端窗口中扫描二维码完成登录\n\n登录成功后界面会自动更新')
+    await alert('请在弹出的终端窗口中扫描二维码完成登录\n\n登录成功后界面会自动更新', {
+      title: 'WhatsApp 登录',
+      variant: 'info'
+    })
   } catch (e) {
-    alert('启动登录失败: ' + e)
+    await alert('启动登录失败: ' + e, { title: '登录失败', variant: 'error' })
     loginLoading.value = false
   }
 }
@@ -415,10 +421,10 @@ const handleSave = async () => {
     
     await fetchChannels()
     
-    alert('渠道配置已保存！')
+    await alert('渠道配置已保存！', { title: '保存成功', variant: 'success' })
   } catch (e) {
     console.error('保存失败:', e)
-    alert('保存失败: ' + e)
+    await alert('保存失败: ' + e, { title: '保存失败', variant: 'error' })
   } finally {
     saving.value = false
   }
