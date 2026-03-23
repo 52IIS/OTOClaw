@@ -106,7 +106,7 @@ const handleClose = () => {
       class="flex fixed inset-0 z-50 justify-center items-center backdrop-blur-sm bg-black/60"
     >
       <div class="flex flex-col mx-4 w-full max-w-md rounded-2xl border shadow-2xl bg-dark-700 border-dark-500 max-h-[90vh]">
-        <div class="flex shrink-0 justify-between items-center p-6 border-b border-dark-500">
+        <div class="flex justify-between items-center p-6 border-b shrink-0 border-dark-500">
           <div class="flex gap-3 items-center">
             <div class="flex justify-center items-center w-10 h-10 rounded-xl bg-claw-500/20">
               <Download :size="20" class="text-claw-400" />
@@ -125,7 +125,7 @@ const handleClose = () => {
           </button>
         </div>
 
-        <div class="flex-1 overflow-y-auto p-6">
+        <div class="overflow-y-auto flex-1 p-6">
           <div class="mb-6">
             <div class="flex justify-between items-center mb-4">
               <div>
@@ -143,14 +143,6 @@ const handleClose = () => {
             </div>
           </div>
 
-          <div v-if="updateInfo.release_notes" class="p-4 mb-6 rounded-lg bg-dark-600">
-            <h4 class="mb-2 text-sm font-medium text-white">更新内容</h4>
-            <div
-              class="text-sm text-gray-300 prose prose-invert prose-sm max-w-none"
-              v-html="releaseNotesHtml"
-            />
-          </div>
-
           <div v-if="progress" class="mb-6">
             <div class="flex justify-between items-center mb-2">
               <span class="text-sm text-gray-400">下载进度</span>
@@ -158,7 +150,7 @@ const handleClose = () => {
             </div>
             <div class="overflow-hidden h-2 rounded-full bg-dark-500">
               <div
-                class="h-full transition-all duration-300 rounded-full bg-claw-500"
+                class="h-full rounded-full transition-all duration-300 bg-claw-500"
                 :style="{ width: `${progress.percentage}%` }"
               />
             </div>
@@ -168,21 +160,38 @@ const handleClose = () => {
             </div>
           </div>
 
-          <div v-if="error" class="p-4 mb-6 rounded-lg bg-red-900/30 border border-red-800">
+          <div v-if="error" class="p-4 mb-6 rounded-lg border border-red-800 bg-red-900/30">
             <div class="flex gap-2 items-center mb-1">
               <AlertCircle :size="16" class="text-red-400" />
               <span class="text-sm font-medium text-red-300">更新失败</span>
             </div>
             <p class="text-sm text-red-400">{{ error }}</p>
+            <a
+              href="https://www.otoclaw.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="inline-flex gap-1 items-center mt-2 text-sm text-claw-400 hover:text-claw-300"
+            >
+             前往官网下载更新
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </a>
           </div>
 
-          <div v-if="installing" class="flex gap-3 items-center p-4 mb-6 rounded-lg bg-claw-500/10 border border-claw-500/30">
+          <div v-if="installing" class="flex gap-3 items-center p-4 mb-6 rounded-lg border bg-claw-500/10 border-claw-500/30">
             <Loader2 :size="20" class="animate-spin text-claw-400" />
             <span class="text-sm text-claw-300">正在安装更新，请稍候...</span>
           </div>
+
+          <div v-if="updateInfo.release_notes" class="p-4 mb-6 rounded-lg bg-dark-600">
+            <h4 class="mb-2 text-sm font-medium text-white">更新内容</h4>
+            <div
+              class="max-w-none text-sm text-gray-300 prose prose-invert prose-sm"
+              v-html="releaseNotesHtml"
+            />
+          </div>
         </div>
 
-        <div class="shrink-0 p-6 border-t border-dark-500">
+        <div class="p-6 border-t shrink-0 border-dark-500">
           <div v-if="!downloading && !installing" class="flex gap-3">
             <button
               @click="handleSkip"

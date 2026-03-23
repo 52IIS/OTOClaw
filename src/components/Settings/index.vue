@@ -161,7 +161,7 @@ const handleUninstall = async () => {
           <div>
             <label class="block mb-3 text-sm text-gray-400">更新模式</label>
             <div class="space-y-2">
-              <label class="flex gap-3 items-center p-4 rounded-lg cursor-pointer transition-colors bg-dark-600 hover:bg-dark-500" :class="{ 'ring-2 ring-claw-500': updateConfig.mode === 'auto' }">
+              <label class="flex gap-3 items-center p-4 rounded-lg transition-colors cursor-pointer bg-dark-600 hover:bg-dark-500" :class="{ 'ring-2 ring-claw-500': updateConfig.mode === 'auto' }">
                 <input
                   type="radio"
                   v-model="updateConfig.mode"
@@ -173,7 +173,7 @@ const handleUninstall = async () => {
                   <p class="text-xs text-gray-500">检测到更新时自动下载并安装</p>
                 </div>
               </label>
-              <label class="flex gap-3 items-center p-4 rounded-lg cursor-pointer transition-colors bg-dark-600 hover:bg-dark-500" :class="{ 'ring-2 ring-claw-500': updateConfig.mode === 'prompt' }">
+              <label class="flex gap-3 items-center p-4 rounded-lg transition-colors cursor-pointer bg-dark-600 hover:bg-dark-500" :class="{ 'ring-2 ring-claw-500': updateConfig.mode === 'prompt' }">
                 <input
                   type="radio"
                   v-model="updateConfig.mode"
@@ -186,6 +186,16 @@ const handleUninstall = async () => {
                 </div>
               </label>
             </div>
+
+            <p class="mt-2 text-xs text-gray-500">
+              自动更新依赖于"启动时检查更新"选项。如需启用自动更新，请确保该选项处于开启状态。
+            </p>
+          </div>
+
+          <div v-if="!updateConfig.check_on_startup" class="p-3 rounded-lg border border-yellow-800 bg-yellow-900/30">
+            <p class="text-sm text-yellow-300">
+              ⚠️ 启动时检查更新已关闭，更新检查将在应用启动时被跳过。
+            </p>
           </div>
 
           <div class="flex justify-between items-center p-4 rounded-lg bg-dark-600">
@@ -218,7 +228,7 @@ const handleUninstall = async () => {
             </button>
           </div>
 
-          <div v-if="updateInfo?.update_available" class="p-4 rounded-lg bg-green-900/30 border border-green-800">
+          <div v-if="updateInfo?.update_available" class="p-4 rounded-lg border border-green-800 bg-green-900/30">
             <div class="flex gap-2 items-center">
               <Download :size="16" class="text-green-400" />
               <span class="text-sm font-medium text-green-300">发现新版本 {{ updateInfo.latest_version }}，正在打开更新窗口...</span>

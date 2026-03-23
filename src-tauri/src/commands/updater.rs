@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tauri::{command, AppHandle, Emitter};
+use uuid::Uuid;
 
 const GITHUB_REPO: &str = "52IIS/OTOClaw";
 const GITHUB_API_URL: &str = "https://api.github.com/repos";
@@ -23,6 +24,13 @@ fn get_config_path() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
         .join(".openclaw")
         .join(CONFIG_FILE_NAME)
+}
+
+fn get_update_cache_dir() -> PathBuf {
+    home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".openclaw")
+        .join("updates")
 }
 
 fn load_update_config() -> UpdateConfig {
@@ -280,15 +288,20 @@ pub async fn download_update(
     
     let total_size = response.content_length().unwrap_or(0);
     info!("[下载更新] 文件大小: {} bytes", total_size);
-    
-    let temp_dir = tempfile::tempdir().map_err(|e| {
-        UPDATE_IN_PROGRESS.store(false, Ordering::SeqCst);
-        format!("创建临时目录失败: {}", e)
-    })?;
-    
+
+    let cache_dir = get_update_cache_dir();
+    if !cache_dir.exists() {
+        fs::create_dir_all(&cache_dir).map_err(|e| {
+            UPDATE_IN_PROGRESS.store(false, Ordering::SeqCst);
+            format!("创建缓存目录失败: {}", e)
+        })?;
+    }
+
     let file_name = download_url.split('/').last().unwrap_or("update");
-    let file_path = temp_dir.path().join(file_name);
-    
+    let unique_id = Uuid::new_v4().to_string()[..8].to_string();
+    let safe_file_name = format!("{}_{}", unique_id, file_name);
+    let file_path = cache_dir.join(&safe_file_name);
+
     let mut file = fs::File::create(&file_path).map_err(|e| {
         UPDATE_IN_PROGRESS.store(false, Ordering::SeqCst);
         format!("创建文件失败: {}", e)
@@ -300,6 +313,7 @@ pub async fn download_update(
     let mut stream = response.bytes_stream();
     let mut downloaded: u64 = 0;
     let start_time = std::time::Instant::now();
+    let mut last_emit_time = std::time::Instant::now();
     
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|e| {
@@ -316,6 +330,8 @@ pub async fn download_update(
         
         let percentage = if total_size > 0 {
             (downloaded as f64 / total_size as f64) * 100.0
+        } else if downloaded > 0 {
+            99.0
         } else {
             0.0
         };
@@ -335,7 +351,12 @@ pub async fn download_update(
             speed,
         };
         
-        let _ = app.emit("update-download-progress", &progress);
+        let time_since_last_emit = last_emit_time.elapsed().as_millis();
+        if time_since_last_emit >= 100 || percentage >= 100.0 {
+            info!("[下载进度] {}% ({} / {} bytes)", percentage, downloaded, total_size);
+            let _ = app.emit("update-download-progress", &progress);
+            last_emit_time = std::time::Instant::now();
+        }
     }
     
     info!("[下载更新] 下载完成: {:?}", file_path);
@@ -345,48 +366,135 @@ pub async fn download_update(
     Ok(file_path.to_string_lossy().to_string())
 }
 
+fn get_file_extension(file_path: &str) -> Option<String> {
+    PathBuf::from(file_path)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|s| s.to_lowercase())
+}
+
 #[command]
 pub async fn install_update(file_path: String) -> Result<UpdateResult, String> {
     info!("[安装更新] 开始安装: {}", file_path);
-    
+
     let path = PathBuf::from(&file_path);
     if !path.exists() {
         return Err("更新文件不存在".to_string());
     }
-    
+
     let os = platform::get_os();
-    
+    let file_ext = get_file_extension(&file_path).unwrap_or_default();
+
     match os.as_str() {
         "windows" => {
-            let _ = std::process::Command::new(&file_path)
-                .spawn()
-                .map_err(|e| format!("启动安装程序失败: {}", e))?;
-            
-            std::process::exit(0);
+            match file_ext.as_str() {
+                "exe" => {
+                    info!("[安装更新] 执行 exe 安装程序");
+                    std::process::Command::new(&file_path)
+                        .spawn()
+                        .map_err(|e| format!("启动安装程序失败: {}", e))?;
+                    std::process::exit(0);
+                }
+                "msi" => {
+                    info!("[安装更新] 执行 msi 安装程序");
+                    std::process::Command::new("msiexec")
+                        .args(["/i", &file_path])
+                        .spawn()
+                        .map_err(|e| format!("启动 MSI 安装程序失败: {}", e))?;
+                    std::process::exit(0);
+                }
+                _ => {
+                    return Err(format!("不支持的安装文件格式: {}", file_ext));
+                }
+            }
         }
         "macos" => {
-            let _ = std::process::Command::new("open")
-                .arg(&file_path)
-                .spawn()
-                .map_err(|e| format!("打开 DMG 失败: {}", e))?;
-            
-            Ok(UpdateResult {
-                success: true,
-                message: "DMG 已打开，请手动完成安装".to_string(),
-                error: None,
-            })
+            match file_ext.as_str() {
+                "dmg" => {
+                    info!("[安装更新] 打开 DMG 镜像");
+                    std::process::Command::new("open")
+                        .arg(&file_path)
+                        .spawn()
+                        .map_err(|e| format!("打开 DMG 失败: {}", e))?;
+                    Ok(UpdateResult {
+                        success: true,
+                        message: "DMG 已打开，请将 OTOClaw 拖入 Applications 文件夹完成安装".to_string(),
+                        error: None,
+                    })
+                }
+                "pkg" | "mpkg" => {
+                    info!("[安装更新] 执行 pkg 安装包");
+                    std::process::Command::new("open")
+                        .arg(&file_path)
+                        .spawn()
+                        .map_err(|e| format!("打开安装包失败: {}", e))?;
+                    Ok(UpdateResult {
+                        success: true,
+                        message: "安装包已打开，请按照提示完成安装".to_string(),
+                        error: None,
+                    })
+                }
+                "app" => {
+                    let app_name = path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("OTOClaw.app");
+                    info!("[安装更新] 复制 app 到 Applications: {}", app_name);
+                    std::process::Command::new("cp")
+                        .args(["-R", &file_path, &format!("/Applications/{}", app_name)])
+                        .spawn()
+                        .map_err(|e| format!("复制应用失败: {}", e))?;
+                    Ok(UpdateResult {
+                        success: true,
+                        message: format!("应用已安装到 /Applications/{}", app_name),
+                        error: None,
+                    })
+                }
+                _ => {
+                    return Err(format!("不支持的安装文件格式: {}", file_ext));
+                }
+            }
         }
         "linux" => {
-            let _ = std::process::Command::new("chmod")
-                .args(["+x", &file_path])
-                .spawn()
-                .map_err(|e| format!("设置执行权限失败: {}", e))?;
-            
-            let _ = std::process::Command::new(&file_path)
-                .spawn()
-                .map_err(|e| format!("启动 AppImage 失败: {}", e))?;
-            
-            std::process::exit(0);
+            match file_ext.as_str() {
+                "appimage" => {
+                    info!("[安装更新] 设置 AppImage 执行权限并启动");
+                    std::process::Command::new("chmod")
+                        .args(["+x", &file_path])
+                        .spawn()
+                        .map_err(|e| format!("设置执行权限失败: {}", e))?;
+                    std::process::Command::new(&file_path)
+                        .spawn()
+                        .map_err(|e| format!("启动 AppImage 失败: {}", e))?;
+                    std::process::exit(0);
+                }
+                "deb" => {
+                    info!("[安装更新] 安装 deb 包");
+                    std::process::Command::new("dpkg")
+                        .args(["-i", &file_path])
+                        .spawn()
+                        .map_err(|e| format!("安装 deb 包失败: {}", e))?;
+                    Ok(UpdateResult {
+                        success: true,
+                        message: "deb 包正在安装中，请输入密码完成安装".to_string(),
+                        error: None,
+                    })
+                }
+                "rpm" => {
+                    info!("[安装更新] 安装 rpm 包");
+                    std::process::Command::new("rpm")
+                        .args(["-ivh", &file_path])
+                        .spawn()
+                        .map_err(|e| format!("安装 rpm 包失败: {}", e))?;
+                    Ok(UpdateResult {
+                        success: true,
+                        message: "rpm 包正在安装中，请输入密码完成安装".to_string(),
+                        error: None,
+                    })
+                }
+                _ => {
+                    return Err(format!("不支持的安装文件格式: {}", file_ext));
+                }
+            }
         }
         _ => Err(format!("不支持的操作系统: {}", os)),
     }
