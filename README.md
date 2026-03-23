@@ -10,7 +10,7 @@
 ![Tauri](https://img.shields.io/badge/Tauri-2.0-orange)
 ![Vue](https://img.shields.io/badge/Vue-3.5-4FC08D)
 ![Rust](https://img.shields.io/badge/Rust-1.70+-red)
-![downloads](https://img.shields.io/github/downloads/52IIS/OTOClaw_new/total?style=flat-square&color=c0392b)
+![downloads](https://img.shields.io/github/downloads/52IIS/OTOClaw/total?style=flat-square&color=c0392b)
 
 🌐 **官方网站**: [otoclaw.com](https://otoclaw.com) - 下载服务 | 教程文档 | 社区交流
 
