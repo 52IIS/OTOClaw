@@ -449,7 +449,7 @@ const hasValidConfig = (channel: ChannelConfig) => {
 
 <template>
   <div class="h-full overflow-y-auto scroll-container pr-2">
-    <div class="max-w-4xl">
+    <div>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div class="md:col-span-1 space-y-2">
           <h3 class="text-sm font-medium text-gray-400 mb-3 px-1">消息渠道</h3>

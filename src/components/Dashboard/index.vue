@@ -9,6 +9,7 @@ import { api, ServiceStatus, isTauri } from '../../lib/tauri'
 import { Terminal, RefreshCw, ChevronDown, ChevronUp } from 'lucide-vue-next'
 import clsx from 'clsx'
 import type { EnvironmentStatus } from '../../vite-env.d'
+import { useDialog } from '../../composables/useDialog'
 
 interface Props {
   envStatus: EnvironmentStatus | null
@@ -19,6 +20,8 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   setupComplete: []
 }>()
+
+const dialog = useDialog()
 
 const status = ref<ServiceStatus | null>(null)
 const loading = ref(true)
@@ -125,6 +128,138 @@ const handleRestart = async () => {
   }
 }
 
+const handleFix = async () => {
+  if (!isTauri()) return
+  
+  const confirmed = await dialog.confirm(
+    '将运行 openclaw doctor --fix 命令来自动修复配置问题。此操作会自动移除或更正无效的配置键值，是否继续？',
+    {
+      title: '确认修复',
+      confirmText: '开始修复',
+      cancelText: '取消',
+    }
+  )
+  
+  if (!confirmed) return
+  
+  actionLoading.value = true
+  logs.value.push('[OTOClaw] 开始运行 openclaw doctor --fix...')
+  
+  try {
+    const result = await invoke<{ success: boolean; message: string; details?: string }>('run_openclaw_fix')
+    
+    if (result.success) {
+      logs.value.push(`[OTOClaw] ✓ ${result.message}`)
+      if (result.details) {
+        const detailLines = result.details.split('\n').filter(l => l.trim())
+        detailLines.forEach(line => {
+          logs.value.push(`  ${line}`)
+        })
+      }
+      await dialog.alert(result.message, { 
+        title: '修复完成',
+        variant: 'success',
+        details: result.details,
+        detailsLabel: '修复详情'
+      })
+    } else {
+      logs.value.push(`[OTOClaw] ✗ ${result.message}`)
+      if (result.details) {
+        const detailLines = result.details.split('\n').filter(l => l.trim())
+        detailLines.forEach(line => {
+          logs.value.push(`  ${line}`)
+        })
+      }
+      await dialog.alert(result.message, { 
+        title: '修复结果',
+        variant: 'warning',
+        details: result.details,
+        detailsLabel: '修复日志'
+      })
+    }
+    
+    await fetchStatus()
+  } catch (e) {
+    const errorMsg = String(e)
+    logs.value.push(`[OTOClaw] ✗ 修复失败: ${errorMsg}`)
+    await dialog.alert(`修复失败: ${errorMsg}`, { 
+      title: '错误',
+      variant: 'error',
+      details: errorMsg,
+      detailsLabel: '错误详情'
+    })
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+const handleDiagnose = async () => {
+  if (!isTauri()) return
+  
+  actionLoading.value = true
+  logs.value.push('[OTOClaw] 开始运行系统诊断...')
+  
+  try {
+    const result = await invoke<{ results: Array<{ name: string; passed: boolean; message: string; suggestion?: string }> }>('run_doctor')
+    
+    logs.value.push('[OTOClaw] 诊断结果:')
+    let hasIssues = false
+    const detailsLines: string[] = []
+    
+    for (const item of result.results) {
+      const icon = item.passed ? '✓' : '✗'
+      const logLine = `${icon} ${item.name}: ${item.message}`
+      logs.value.push(`  ${logLine}`)
+      detailsLines.push(logLine)
+      
+      if (!item.passed) {
+        hasIssues = true
+        if (item.suggestion) {
+          logs.value.push(`    建议: ${item.suggestion}`)
+          detailsLines.push(`  建议: ${item.suggestion}`)
+        }
+      }
+    }
+    
+    const passedCount = result.results.filter(r => r.passed).length
+    const totalCount = result.results.length
+    const detailsText = detailsLines.join('\n')
+    
+    if (hasIssues) {
+      await dialog.alert(
+        `诊断完成：${passedCount}/${totalCount} 项通过\n\n建议点击"修复"按钮自动修复问题`,
+        { 
+          title: '诊断结果',
+          variant: 'warning',
+          details: detailsText,
+          detailsLabel: '诊断详情'
+        }
+      )
+    } else {
+      await dialog.alert(
+        `诊断完成：所有 ${totalCount} 项检查均通过`,
+        { 
+          title: '诊断结果',
+          variant: 'success',
+          details: detailsText,
+          detailsLabel: '诊断详情'
+        }
+      )
+    }
+  } catch (e) {
+    const errorMsg = String(e)
+    logs.value.push(`[OTOClaw] ✗ 诊断失败: ${errorMsg}`)
+    await dialog.alert(`诊断失败: ${errorMsg}`, { 
+      title: '错误',
+      variant: 'error',
+      details: errorMsg,
+      detailsLabel: '错误详情'
+    })
+  } finally {
+    actionLoading.value = false
+  }
+}
+
 const getLogLineClass = (line: string) => {
   if (line.includes('error') || line.includes('Error') || line.includes('ERROR')) {
     return 'text-red-400'
@@ -142,7 +277,7 @@ const needsSetup = computed(() => props.envStatus && !props.envStatus.ready)
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto scroll-container pr-2">
+  <div class="overflow-y-auto pr-2 h-full scroll-container">
     <div class="space-y-6">
       <Transition name="fade-slide">
         <Setup v-if="needsSetup" embedded @complete="emit('setupComplete')" />
@@ -159,26 +294,28 @@ const needsSetup = computed(() => props.envStatus && !props.envStatus.ready)
           @start="handleStart"
           @stop="handleStop"
           @restart="handleRestart"
+          @diagnose="handleDiagnose"
+          @fix="handleFix"
         />
       </Transition>
 
       <Transition name="fade-slide">
-        <div class="bg-dark-700 rounded-2xl border border-dark-500 overflow-hidden">
+        <div class="overflow-hidden rounded-2xl border bg-dark-700 border-dark-500">
           <div 
-            class="flex items-center justify-between px-4 py-3 bg-dark-600/50 cursor-pointer"
+            class="flex justify-between items-center px-4 py-3 cursor-pointer bg-dark-600/50"
             @click="logsExpanded = !logsExpanded"
           >
-            <div class="flex items-center gap-2">
+            <div class="flex gap-2 items-center">
               <Terminal :size="16" class="text-gray-500" />
               <span class="text-sm font-medium text-white">实时日志</span>
               <span class="text-xs text-gray-500">
                 ({{ logs.length }} 行)
               </span>
             </div>
-            <div class="flex items-center gap-3">
+            <div class="flex gap-3 items-center">
               <template v-if="logsExpanded">
                 <label 
-                  class="flex items-center gap-2 text-xs text-gray-400"
+                  class="flex gap-2 items-center text-xs text-gray-400"
                   @click.stop
                 >
                   <input
@@ -204,9 +341,9 @@ const needsSetup = computed(() => props.envStatus && !props.envStatus.ready)
           <div
             v-show="logsExpanded"
             ref="logsContainerRef"
-            class="h-64 overflow-y-auto p-4 font-mono text-xs leading-relaxed bg-dark-800"
+            class="overflow-y-auto p-4 h-64 font-mono text-xs leading-relaxed bg-dark-800"
           >
-            <div v-if="logs.length === 0" class="h-full flex items-center justify-center text-gray-500">
+            <div v-if="logs.length === 0" class="flex justify-center items-center h-full text-gray-500">
               <p>暂无日志，请先启动服务</p>
             </div>
             <template v-else>

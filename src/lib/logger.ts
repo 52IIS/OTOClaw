@@ -95,6 +95,7 @@ const MODULE_COLORS: Record<string, string> = {
   Dashboard: '#a3e635',
   Testing: '#e879f9',
   API: '#fbbf24',
+  Chat: '#22d3ee',
 };
 
 const getModuleColor = (module: string): string => {
@@ -210,6 +211,7 @@ export const setupLogger = createLogger('Setup');
 export const dashboardLogger = createLogger('Dashboard');
 export const testingLogger = createLogger('Testing');
 export const apiLogger = createLogger('API');
+export const chatLogger = createLogger('Chat');
 
 // 在控制台暴露日志控制函数
 if (typeof window !== 'undefined') {

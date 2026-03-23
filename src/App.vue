@@ -4,15 +4,20 @@ import { invoke } from '@tauri-apps/api/core'
 import Sidebar from './components/Layout/Sidebar.vue'
 import Header from './components/Layout/Header.vue'
 import Dashboard from './components/Dashboard/index.vue'
+import Chat from './components/Chat/index.vue'
+import Agents from './components/Agents/index.vue'
+import Skills from './components/Skills/index.vue'
 import AIConfig from './components/AIConfig/index.vue'
 import Channels from './components/Channels/index.vue'
+import Sandbox from './components/Sandbox/index.vue'
 import Settings from './components/Settings/index.vue'
 import Testing from './components/Testing/index.vue'
 import Logs from './components/Logs/index.vue'
 import Dialog from './components/Dialog.vue'
+import UpdateDialog from './components/UpdateDialog.vue'
 import { useDialog } from './composables/useDialog'
 import { appLogger } from './lib/logger'
-import { isTauri } from './lib/tauri'
+import { isTauri, api, type OTOClawUpdateInfo, type UpdateConfig } from './lib/tauri'
 import { Download, X, Loader2, CheckCircle, AlertCircle } from 'lucide-vue-next'
 import type { PageType, EnvironmentStatus, ServiceStatus, UpdateInfo, UpdateResult } from './vite-env.d'
 
@@ -27,6 +32,10 @@ const updateInfo = ref<UpdateInfo | null>(null)
 const showUpdateBanner = ref(false)
 const updating = ref(false)
 const updateResult = ref<UpdateResult | null>(null)
+
+const otoclawUpdateInfo = ref<OTOClawUpdateInfo | null>(null)
+const showOtoClawUpdateDialog = ref(false)
+const updateConfig = ref<UpdateConfig | null>(null)
 
 const checkEnvironment = async () => {
   if (!isTauri()) {
@@ -87,6 +96,56 @@ const handleUpdate = async () => {
   }
 }
 
+const checkOTOClawUpdate = async () => {
+  if (!isTauri()) return
+  
+  try {
+    const config = await api.getUpdateConfig()
+    updateConfig.value = config
+    
+    if (!config.check_on_startup) {
+      appLogger.info('OTOClaw 启动时检查更新已禁用')
+      return
+    }
+    
+    if (config.skipped_version) {
+      appLogger.info('已跳过版本', config.skipped_version)
+    }
+    
+    appLogger.info('检查 OTOClaw 更新...')
+    const info = await api.checkOTOClawUpdate()
+    appLogger.info('OTOClaw 更新检查结果', info)
+    
+    if (info.update_available) {
+      if (config.skipped_version === info.latest_version) {
+        appLogger.info('用户已跳过此版本')
+        return
+      }
+      
+      otoclawUpdateInfo.value = info
+      
+      if (config.mode === 'auto') {
+        appLogger.info('自动更新模式，开始下载更新')
+        showOtoClawUpdateDialog.value = true
+      } else {
+        appLogger.info('提示更新模式，显示更新弹窗')
+        showOtoClawUpdateDialog.value = true
+      }
+    }
+  } catch (e) {
+    appLogger.error('检查 OTOClaw 更新失败', e)
+  }
+}
+
+const handleSkipVersion = async (version: string) => {
+  try {
+    await api.skipVersion(version)
+    appLogger.info('已跳过版本', version)
+  } catch (e) {
+    appLogger.error('跳过版本失败', e)
+  }
+}
+
 const handleSetupComplete = () => {
   appLogger.info('安装向导完成')
   checkEnvironment()
@@ -99,6 +158,7 @@ const handleNavigate = (page: PageType) => {
 
 let statusInterval: ReturnType<typeof setInterval> | null = null
 let updateTimer: ReturnType<typeof setTimeout> | null = null
+let otoclawUpdateTimer: ReturnType<typeof setTimeout> | null = null
 
 onMounted(() => {
   appLogger.info('🦞 App 组件已挂载')
@@ -108,6 +168,10 @@ onMounted(() => {
     updateTimer = setTimeout(() => {
       checkUpdate()
     }, 2000)
+    
+    otoclawUpdateTimer = setTimeout(() => {
+      checkOTOClawUpdate()
+    }, 5000)
     
     const fetchServiceStatus = async () => {
       try {
@@ -124,13 +188,18 @@ onMounted(() => {
 onUnmounted(() => {
   if (statusInterval) clearInterval(statusInterval)
   if (updateTimer) clearTimeout(updateTimer)
+  if (otoclawUpdateTimer) clearTimeout(otoclawUpdateTimer)
 })
 
 const currentComponent = computed(() => {
   const components: Record<PageType, any> = {
     dashboard: Dashboard,
+    chat: Chat,
+    agents: Agents,
+    skills: Skills,
     ai: AIConfig,
     channels: Channels,
+    sandbox: Sandbox,
     testing: Testing,
     logs: Logs,
     settings: Settings,
@@ -229,6 +298,13 @@ const currentComponent = computed(() => {
       :options="dialogState.options"
       @confirm="handleConfirm"
       @cancel="handleCancel"
+    />
+    
+    <UpdateDialog
+      v-if="showOtoClawUpdateDialog"
+      :update-info="otoclawUpdateInfo"
+      @close="showOtoClawUpdateDialog = false; otoclawUpdateInfo = null"
+      @skip="handleSkipVersion"
     />
   </div>
 </template>

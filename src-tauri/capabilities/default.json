@@ -14,6 +14,19 @@
     "fs:allow-read",
     "fs:allow-write",
     "process:default",
-    "notification:default"
+    "notification:default",
+    "dialog:default",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "opener:default",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [
+        { "path": "$HOME/**" },
+        { "path": "$APPDATA/**" },
+        { "path": "$LOCALAPPDATA/**" },
+        { "path": "$TEMP/**" }
+      ]
+    }
   ]
 }

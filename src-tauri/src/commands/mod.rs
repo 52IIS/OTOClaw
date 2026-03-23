@@ -1,5 +1,11 @@
+pub mod agents;
+pub mod chat;
 pub mod config;
 pub mod diagnostics;
 pub mod installer;
 pub mod process;
+pub mod prompt;
+pub mod sandbox;
 pub mod service;
+pub mod skills;
+pub mod updater;

@@ -10,6 +10,7 @@
 ![Tauri](https://img.shields.io/badge/Tauri-2.0-orange)
 ![Vue](https://img.shields.io/badge/Vue-3.5-4FC08D)
 ![Rust](https://img.shields.io/badge/Rust-1.70+-red)
+![downloads](https://img.shields.io/github/downloads/52IIS/OTOClaw_new/total?style=flat-square&color=c0392b)
 
 🌐 **官方网站**: [otoclaw.com](https://otoclaw.com) - 下载服务 | 教程文档 | 社区交流
 
@@ -25,9 +26,9 @@
 
 ## 📖 项目背景
 
-本项目基于 GitHub 开源项目 **[OpenClaw Manager](https://github.com/miaoxworld/openclaw-manager)** 进行二次开发（原项目已获得 ⭐ 1.2k Star）。
+**OTOClaw（一键龙虾）** 是一款面向 AI 助手管理场景的现代化桌面应用，基于 **Tauri 2.0 + Vue 3 + TypeScript + Rust** 技术栈构建。旨在提供跨平台（Windows/macOS/Linux）的 AI 助手可视化管理和一键部署解决方案。
 
-开发目的是将原项目的 **React 技术栈迁移至 Vue 3 技术栈**，同时作为个人技术学习实践。在保持原有功能完整性的基础上，探索 Vue 3 Composition API、Pinia 状态管理等现代 Vue 生态的最佳实践。
+项目在设计之初参考了 [OpenClaw Manager](https://github.com/miaoxworld/openclaw-manager) 的产品思路，但现已发展为独立架构：采用 Rust 原生后端实现高性能系统调用，前端使用 Vue 3 Composition API + Pinia 状态管理打造现代化响应式 UI，并扩展了智能体管理、内置聊天界面、技能系统等创新功能。
 
 ## 📸 界面预览
 
@@ -84,9 +85,15 @@
 | ------------ | ---------------------------------------- |
 | 📊 **仪表盘**   | 实时服务状态监控、进程内存统计、一键启动/停止/重启               |
 | 🤖 **AI 配置** | 14+ AI 提供商、自定义 API 地址、模型快速切换             |
+| 🤖 **智能体管理** | 多智能体创建、独立工作区、渠道绑定 |
+| 📥 **内置聊天界面** | 无需第三方工具即可直接对话测试 |
+| 🧩 **技能系统** | 技能安装、配置、导出、依赖管理 |
+| 🐳 **沙箱管理** | Docker 容器配置、安全策略可视化 |
 | 📱 **消息渠道**  | Telegram、Discord、Slack、飞书、微信、iMessage、钉钉 |
 | ⚡ **服务管理**   | 后台服务控制、实时日志、开机自启                         |
 | 🧪 **测试诊断**  | 系统环境检查、AI 连接测试、渠道连通性测试                   |
+| 🔄 **应用更新** | 内置更新检查与一键升级 |
+
 
 ## 🍎 macOS 常见问题
 
@@ -311,8 +318,7 @@ MIT License - 详见 [LICENSE](LICENSE)
 ## 🔗 相关链接
 
 - **OTOClaw 官网**: [otoclaw.com](https://otoclaw.com) - 下载服务、教程文档、社区交流
-- **原项目**: [OpenClaw Manager](https://github.com/miaoxworld/openclaw-manager) ⭐ 1.2k - 图形界面版本（React）
-- **命令行版本**: [OpenClawInstaller](https://github.com/miaoxworld/OpenClawInstaller)
+- **OpenClaw 项目**: [OpenClaw](https://github.com/miaoxworld/OpenClawInstaller) - 原始命令行工具
 - **Tauri 官方文档**: [tauri.app](https://tauri.app/)
 - **Vue 3 官方文档**: [vuejs.org](https://vuejs.org/)
 

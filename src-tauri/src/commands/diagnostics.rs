@@ -580,21 +580,17 @@ pub async fn start_channel_login(channel_type: String) -> Result<String, String>
             #[cfg(target_os = "macos")]
             {
                 let env_path = platform::get_env_file_path();
-                // 创建一个临时脚本文件
-                // 流程：1. 启用插件 2. 重启 Gateway 3. 登录
-                let script_content = format!(
-                    r#"#!/bin/bash
+                
+                // 步骤1: 启用插件并更新配置
+                info!("[渠道登录] 步骤1: 配置 WhatsApp 插件...");
+                let config_script = format!(
+                    r#"
 source {} 2>/dev/null
-clear
-echo "╔════════════════════════════════════════════════════════╗"
-echo "║           📱 WhatsApp 登录向导                          ║"
-echo "╚════════════════════════════════════════════════════════╝"
-echo ""
 
-echo "步骤 1/3: 启用 WhatsApp 插件..."
+# 启用插件
 openclaw plugins enable whatsapp 2>/dev/null || true
 
-# 确保 whatsapp 在 plugins.allow 数组中
+# 使用 Python 更新配置文件
 python3 << 'PYEOF'
 import json
 import os
@@ -606,7 +602,6 @@ try:
     with open(config_path, 'r') as f:
         config = json.load(f)
     
-    # 设置 plugins.allow 和 plugins.entries
     if 'plugins' not in config:
         config['plugins'] = {{'allow': [], 'entries': {{}}}}
     if 'allow' not in config['plugins']:
@@ -619,7 +614,6 @@ try:
     
     config['plugins']['entries'][plugin_id] = {{'enabled': True}}
     
-    # 确保 channels.whatsapp 存在（但不设置 enabled，WhatsApp 不支持这个键）
     if 'channels' not in config:
         config['channels'] = {{}}
     if plugin_id not in config['channels']:
@@ -631,93 +625,59 @@ try:
 except Exception as e:
     print(f"Warning: {{e}}")
 PYEOF
-
-echo "✅ 插件已启用"
-echo ""
-
-echo "步骤 2/3: 重启 Gateway 使插件生效..."
-# 使用 openclaw 命令停止和启动 gateway
-openclaw gateway stop 2>/dev/null || true
-sleep 2
-# 启动 gateway 服务
-openclaw gateway start 2>/dev/null || openclaw gateway --port 18789 &
-sleep 3
-echo "✅ Gateway 已重启"
-echo ""
-
-echo "步骤 3/3: 启动 WhatsApp 登录..."
-echo "请使用 WhatsApp 手机 App 扫描下方二维码"
-echo ""
-openclaw channels login --channel whatsapp --verbose
-echo ""
-echo "════════════════════════════════════════════════════════"
-echo "登录完成！"
-echo ""
-read -p "按回车键关闭此窗口..."
 "#,
                     env_path
                 );
                 
-                let script_path = "/tmp/openclaw_whatsapp_login.command";
-                std::fs::write(script_path, script_content)
-                    .map_err(|e| format!("创建脚本失败: {}", e))?;
+                let _ = shell::run_bash_output(&config_script);
+                info!("[渠道登录] 插件配置完成");
                 
-                // 设置可执行权限
-                std::process::Command::new("chmod")
-                    .args(["+x", script_path])
-                    .output()
-                    .map_err(|e| format!("设置权限失败: {}", e))?;
+                // 步骤2: 重启 Gateway
+                info!("[渠道登录] 步骤2: 重启 Gateway...");
+                let _ = shell::run_openclaw(&["gateway", "stop"]);
+                std::thread::sleep(std::time::Duration::from_secs(2));
                 
-                // 使用 open 命令打开 .command 文件（会自动在新终端窗口中执行）
-                std::process::Command::new("open")
-                    .arg(script_path)
-                    .spawn()
-                    .map_err(|e| format!("启动终端失败: {}", e))?;
+                // 后台启动 gateway
+                let _ = shell::spawn_openclaw_gateway();
+                std::thread::sleep(std::time::Duration::from_secs(3));
+                info!("[渠道登录] Gateway 已重启");
+                
+                // 步骤3: 执行登录命令并捕获输出
+                info!("[渠道登录] 步骤3: 执行登录命令...");
+                let login_result = shell::run_openclaw(&["channels", "login", "--channel", "whatsapp", "--verbose"]);
+                
+                match login_result {
+                    Ok(output) => {
+                        info!("[渠道登录] 登录命令执行完成，输出长度: {}", output.len());
+                        // 返回输出给前端显示（包含二维码）
+                        Ok(format!("WhatsApp 登录流程已启动。请查看下方二维码：\n\n{}", output))
+                    }
+                    Err(e) => {
+                        warn!("[渠道登录] 登录命令执行失败: {}", e);
+                        Err(format!("WhatsApp 登录失败: {}", e))
+                    }
+                }
             }
             
             #[cfg(target_os = "linux")]
             {
                 let env_path = platform::get_env_file_path();
-                // 创建脚本
-                let script_content = format!(
-                    r#"#!/bin/bash
+                let script = format!(
+                    r#"
 source {} 2>/dev/null
-clear
-echo "📱 WhatsApp 登录向导"
-echo ""
 openclaw channels login --channel whatsapp --verbose
-echo ""
-read -p "按回车键关闭..."
 "#,
                     env_path
                 );
                 
-                let script_path = "/tmp/openclaw_whatsapp_login.sh";
-                std::fs::write(script_path, &script_content)
-                    .map_err(|e| format!("创建脚本失败: {}", e))?;
-                
-                std::process::Command::new("chmod")
-                    .args(["+x", script_path])
-                    .output()
-                    .map_err(|e| format!("设置权限失败: {}", e))?;
-                
-                // 尝试不同的终端模拟器
-                let terminals = ["gnome-terminal", "xfce4-terminal", "konsole", "xterm"];
-                let mut launched = false;
-                
-                for term in terminals {
-                    let result = std::process::Command::new(term)
-                        .args(["--", script_path])
-                        .spawn();
-                    
-                    if result.is_ok() {
-                        launched = true;
-                        break;
+                match shell::run_bash_output(&script) {
+                    Ok(output) => {
+                        info!("[渠道登录] 登录命令执行完成");
+                        Ok(format!("WhatsApp 登录流程已启动。\n\n{}", output))
                     }
-                }
-                
-                if !launched {
-                    return Err("无法启动终端，请手动运行: openclaw channels login --channel whatsapp".to_string());
+                    Err(e) => {
+                        Err(format!("WhatsApp 登录失败: {}", e))
+                    }
                 }
             }
             
@@ -725,9 +685,81 @@ read -p "按回车键关闭..."
             {
                 return Err("Windows 暂不支持自动启动终端，请手动运行: openclaw channels login --channel whatsapp".to_string());
             }
-            
-            Ok("已在新终端窗口中启动 WhatsApp 登录，请查看弹出的终端窗口并扫描二维码".to_string())
         }
         _ => Err(format!("不支持 {} 的登录向导", channel_type)),
+    }
+}
+
+/// OpenClaw 修复结果
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct FixResult {
+    pub success: bool,
+    pub message: String,
+    pub details: Option<String>,
+}
+
+/// 运行 OpenClaw 修复命令
+#[command]
+pub async fn run_openclaw_fix() -> Result<FixResult, String> {
+    info!("[修复] 开始运行 openclaw doctor --fix...");
+    
+    // 检查 openclaw 是否安装
+    if shell::get_openclaw_path().is_none() {
+        return Err("找不到 openclaw 命令，请先通过 npm install -g openclaw 安装".to_string());
+    }
+    
+    // 执行 openclaw doctor --fix
+    info!("[修复] 执行: openclaw doctor --fix");
+    let result = shell::run_openclaw(&["doctor", "--fix"]);
+    
+    match result {
+        Ok(output) => {
+            info!("[修复] 命令执行完成");
+            
+            // 清理 ANSI 颜色代码
+            let clean_output = strip_ansi_codes(&output);
+            
+            // 检查是否有错误
+            let has_error = clean_output.to_lowercase().contains("error")
+                && !clean_output.contains("0 errors");
+            
+            // 检查是否修复了问题
+            let fixed_count = if clean_output.contains("fixed") || clean_output.contains("修复") {
+                // 尝试提取修复数量
+                Some(clean_output.matches("fixed").count() + clean_output.matches("修复").count())
+            } else {
+                None
+            };
+            
+            // 检查是否通过
+            let all_passed = clean_output.contains("All checks passed")
+                || clean_output.contains("全部通过")
+                || clean_output.contains("0 errors")
+                || clean_output.contains("0 warnings");
+            
+            let success = all_passed || !has_error;
+            
+            let message = if all_passed {
+                "所有检查通过，配置正常".to_string()
+            } else if fixed_count.is_some() {
+                format!("已修复 {} 个问题", fixed_count.unwrap())
+            } else if success {
+                "修复完成".to_string()
+            } else {
+                "修复过程中遇到问题".to_string()
+            };
+            
+            info!("[修复] 结果: {}", message);
+            
+            Ok(FixResult {
+                success,
+                message,
+                details: Some(clean_output),
+            })
+        }
+        Err(e) => {
+            error!("[修复] 命令执行失败: {}", e);
+            Err(format!("修复命令执行失败: {}", e))
+        }
     }
 }

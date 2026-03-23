@@ -152,10 +152,12 @@ pub async fn get_or_create_gateway_token() -> Result<String, String> {
         config["gateway"]["auth"] = json!({});
     }
     
-    // 设置 token 和 mode
+    // 设置 token 和 mode（使用正确的字段名）
     config["gateway"]["auth"]["token"] = json!(new_token);
     config["gateway"]["auth"]["mode"] = json!("token");
     config["gateway"]["mode"] = json!("local");
+    config["gateway"]["bind"] = json!("loopback");
+    config["gateway"]["port"] = json!(18789);
     
     // 保存配置
     save_openclaw_config(&config)?;
@@ -1146,4 +1148,329 @@ pub async fn install_feishu_plugin() -> Result<String, String> {
             Err(format!("安装飞书插件失败: {}\n\n请手动执行: openclaw plugins install @m1heng-clawd/feishu", e))
         }
     }
+}
+
+// ============ 聊天模块相关命令 ============
+
+/// 智能体信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentInfo {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub avatar: Option<String>,
+    #[serde(rename = "isDefault")]
+    pub is_default: bool,
+    pub model: Option<String>,
+}
+
+/// 模型信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelInfo {
+    pub id: String,
+    pub name: String,
+    pub provider: Option<String>,
+    #[serde(rename = "isDefault")]
+    pub is_default: bool,
+}
+
+/// 智能体列表结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentsListResult {
+    pub agents: Vec<AgentInfo>,
+    #[serde(rename = "defaultId")]
+    pub default_id: Option<String>,
+}
+
+/// 模型列表结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelsListResult {
+    pub models: Vec<ModelInfo>,
+    #[serde(rename = "defaultId")]
+    pub default_id: Option<String>,
+}
+
+/// Gateway 配置（用于前端显示）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GatewayConfigInfo {
+    pub url: String,
+    pub token_masked: Option<String>,
+    pub token_full: Option<String>,
+    pub password: Option<String>,
+}
+
+/// 对敏感字符串进行掩码处理
+fn mask_sensitive_string(s: &str) -> String {
+    if s.is_empty() {
+        return String::new();
+    }
+    let len = s.len();
+    if len <= 8 {
+        "****".to_string()
+    } else if len <= 16 {
+        format!("{}****", &s[..4])
+    } else {
+        format!("{}****{}", &s[..4], &s[len - 4..])
+    }
+}
+
+/// 获取智能体列表
+#[command]
+pub async fn get_agents() -> Result<AgentsListResult, String> {
+    info!("[智能体] 获取智能体列表...");
+    
+    let config = load_openclaw_config()?;
+    
+    // 获取默认模型
+    let default_model = config
+        .pointer("/agents/defaults/model/primary")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    
+    // OpenClaw 使用 "default" 作为默认智能体
+    // 从配置中读取 agents.list 作为自定义智能体列表
+    let mut agents: Vec<AgentInfo> = Vec::new();
+    let mut default_id: Option<String> = None;
+    
+    // 添加默认智能体
+    agents.push(AgentInfo {
+        id: "default".to_string(),
+        name: "默认助手".to_string(),
+        description: Some("通用AI助手，使用配置的主模型进行对话".to_string()),
+        avatar: Some("🤖".to_string()),
+        is_default: true,
+        model: default_model.clone(),
+    });
+    default_id = Some("default".to_string());
+    
+    // 尝试从配置中读取自定义智能体（使用 /agents/list 路径）
+    if let Some(custom_agents) = config.pointer("/agents/list").and_then(|v| v.as_array()) {
+        for agent_config in custom_agents {
+            if let Some(agent_id) = agent_config.get("id").and_then(|v| v.as_str()) {
+                if agent_id == "default" {
+                    continue;
+                }
+                
+                let name = agent_config
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(agent_id)
+                    .to_string();
+                let description = agent_config
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                let avatar = agent_config
+                    .get("avatar")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| agent_config.get("identity").and_then(|i| i.get("emoji").and_then(|v| v.as_str())))
+                    .map(|s| s.to_string());
+                let is_default = agent_config
+                    .get("default")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                
+                // 获取智能体的模型配置
+                let agent_model = agent_config
+                    .get("model")
+                    .and_then(|m| m.get("primary").and_then(|v| v.as_str()))
+                    .map(|s| s.to_string())
+                    .or_else(|| default_model.clone());
+                
+                agents.push(AgentInfo {
+                    id: agent_id.to_string(),
+                    name,
+                    description,
+                    avatar,
+                    is_default,
+                    model: agent_model,
+                });
+                
+                if is_default {
+                    default_id = Some(agent_id.to_string());
+                }
+            }
+        }
+    }
+    
+    info!("[智能体] ✓ 返回 {} 个智能体", agents.len());
+    Ok(AgentsListResult {
+        agents,
+        default_id,
+    })
+}
+
+/// 获取模型列表
+#[command]
+pub async fn get_models() -> Result<ModelsListResult, String> {
+    info!("[模型] 获取模型列表...");
+    
+    let config = load_openclaw_config()?;
+    
+    let mut models: Vec<ModelInfo> = Vec::new();
+    let mut default_id: Option<String> = None;
+    
+    // 获取主模型作为默认
+    if let Some(primary) = config
+        .pointer("/agents/defaults/model/primary")
+        .and_then(|v| v.as_str())
+    {
+        default_id = Some(primary.to_string());
+    }
+    
+    // 从 providers 中读取已配置的模型
+    if let Some(providers) = config.pointer("/models/providers").and_then(|v| v.as_object()) {
+        for (provider_name, provider_config) in providers {
+            if let Some(models_array) = provider_config.get("models").and_then(|v| v.as_array()) {
+                for model_config in models_array {
+                    if let Some(model_id) = model_config.get("id").and_then(|v| v.as_str()) {
+                        let full_id = format!("{}/{}", provider_name, model_id);
+                        let name = model_config
+                            .get("name")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or(model_id)
+                            .to_string();
+                        let is_default = default_id.as_ref() == Some(&full_id);
+                        
+                        models.push(ModelInfo {
+                            id: full_id,
+                            name,
+                            provider: Some(provider_name.clone()),
+                            is_default,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    
+    // 如果没有配置任何模型，添加一些默认选项
+    if models.is_empty() {
+        models.push(ModelInfo {
+            id: "anthropic/claude-sonnet-4-5-20250929".to_string(),
+            name: "Claude Sonnet 4.5".to_string(),
+            provider: Some("anthropic".to_string()),
+            is_default: true,
+        });
+        default_id = Some("anthropic/claude-sonnet-4-5-20250929".to_string());
+        
+        models.push(ModelInfo {
+            id: "openai/gpt-4o".to_string(),
+            name: "GPT-4o".to_string(),
+            provider: Some("openai".to_string()),
+            is_default: false,
+        });
+    }
+    
+    info!("[模型] ✓ 返回 {} 个模型", models.len());
+    Ok(ModelsListResult {
+        models,
+        default_id,
+    })
+}
+
+/// 获取 Gateway 配置
+#[command]
+pub async fn get_gateway_config() -> Result<GatewayConfigInfo, String> {
+    info!("[Gateway配置] 获取 Gateway 配置...");
+    
+    let config = load_openclaw_config()?;
+    
+    // Gateway URL 固定为本地地址
+    let port = config
+        .pointer("/gateway/port")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(18789) as u16;
+    let url = format!("ws://localhost:{}", port);
+    
+    // 获取 Token（完整版本，用于连接）
+    let token_full = config
+        .pointer("/gateway/auth/token")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    
+    // Token 掩码版本（用于显示）
+    let token_masked = token_full.as_ref().map(|t| mask_sensitive_string(t));
+    
+    // 获取密码
+    let password = config
+        .pointer("/gateway/auth/password")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    
+    info!("[Gateway配置] ✓ URL: {}, Token: {}", url, token_masked.as_deref().unwrap_or("未设置"));
+    
+    Ok(GatewayConfigInfo {
+        url,
+        token_masked,
+        token_full,
+        password,
+    })
+}
+
+/// 保存 Gateway 配置
+#[command]
+pub async fn save_gateway_config(
+    url: Option<String>,
+    token: Option<String>,
+    password: Option<String>,
+) -> Result<String, String> {
+    info!("[Gateway配置] 保存 Gateway 配置...");
+    
+    let mut config = load_openclaw_config()?;
+    
+    // 确保路径存在
+    if config.get("gateway").is_none() {
+        config["gateway"] = json!({});
+    }
+    if config["gateway"].get("auth").is_none() {
+        config["gateway"]["auth"] = json!({});
+    }
+    
+    // 解析 URL 获取端口号（URL 仅用于前端显示，后端使用 port 字段）
+    if let Some(u) = url {
+        // 从 URL 中提取端口号
+        if let Some(port_str) = u.split(':').last() {
+            if let Ok(port) = port_str.parse::<u64>() {
+                config["gateway"]["port"] = json!(port);
+                info!("[Gateway配置] 设置端口: {}", port);
+            }
+        }
+    }
+    
+    // 更新 Token
+    if let Some(t) = token {
+        if !t.is_empty() {
+            config["gateway"]["auth"]["token"] = json!(t);
+        }
+    }
+    
+    // 更新密码
+    if let Some(p) = password {
+        if !p.is_empty() {
+            config["gateway"]["auth"]["password"] = json!(p);
+        }
+    }
+    
+    // 设置认证模式和绑定模式（使用正确的字段名）
+    config["gateway"]["auth"]["mode"] = json!("token");
+    config["gateway"]["mode"] = json!("local");
+    config["gateway"]["bind"] = json!("loopback");
+    
+    save_openclaw_config(&config)?;
+    
+    info!("[Gateway配置] ✓ 配置已保存");
+    Ok("Gateway 配置已保存".to_string())
+}
+
+/// 初始化 Gateway Token（如果不存在则创建）
+#[command]
+pub async fn init_gateway_token() -> Result<String, String> {
+    info!("[Gateway Token] 初始化 Gateway Token...");
+    
+    // 使用现有的 get_or_create_gateway_token 逻辑
+    let token = get_or_create_gateway_token().await?;
+    
+    // 返回掩码版本
+    Ok(mask_sensitive_string(&token))
 }

@@ -703,13 +703,11 @@ Read-Host "按回车键关闭此窗口"
         shell::run_powershell_output(script)?;
         Ok("已打开安装终端".to_string())
     } else if platform::is_macos() {
-        // macOS: 打开 Terminal.app
-        let script_content = r#"#!/bin/bash
-clear
-echo "========================================"
-echo "    Node.js 安装向导"
-echo "========================================"
-echo ""
+        // macOS: 静默执行安装，不弹出终端窗口
+        info!("[安装Node.js] macOS 静默安装模式...");
+        
+        let script = r#"
+set -e
 
 # 检查 Homebrew
 if ! command -v brew &> /dev/null; then
@@ -725,30 +723,22 @@ fi
 
 echo "正在安装 Node.js 22..."
 brew install node@22
-brew link --overwrite node@22
+brew link --overwrite node@22 2>/dev/null || true
 
-echo ""
-echo "安装完成！"
+# 验证安装
 node --version
-echo ""
-read -p "按回车键关闭此窗口..."
 "#;
         
-        let script_path = "/tmp/openclaw_install_nodejs.command";
-        std::fs::write(script_path, script_content)
-            .map_err(|e| format!("创建脚本失败: {}", e))?;
-        
-        std::process::Command::new("chmod")
-            .args(["+x", script_path])
-            .output()
-            .map_err(|e| format!("设置权限失败: {}", e))?;
-        
-        std::process::Command::new("open")
-            .arg(script_path)
-            .spawn()
-            .map_err(|e| format!("启动终端失败: {}", e))?;
-        
-        Ok("已打开安装终端".to_string())
+        match shell::run_bash_output(script) {
+            Ok(output) => {
+                info!("[安装Node.js] 安装成功: {}", output);
+                Ok(format!("Node.js 安装成功！{}", output))
+            }
+            Err(e) => {
+                error!("[安装Node.js] 安装失败: {}", e);
+                Err(format!("Node.js 安装失败: {}", e))
+            }
+        }
     } else {
         Err("请手动安装 Node.js: https://nodejs.org/".to_string())
     }
@@ -781,17 +771,15 @@ Read-Host "按回车键关闭此窗口"
         shell::run_powershell_output(script)?;
         Ok("已打开安装终端".to_string())
     } else if platform::is_macos() {
-        let script_content = r#"#!/bin/bash
-clear
-echo "========================================"
-echo "    OpenClaw 安装向导"
-echo "========================================"
-echo ""
+        // macOS: 静默执行安装，不弹出终端窗口
+        info!("[安装OpenClaw] macOS 静默安装模式...");
+        
+        let script = r#"
+set -e
 
 echo "正在安装 OpenClaw..."
 npm install -g openclaw@latest
 
-echo ""
 echo "初始化配置..."
 openclaw config set gateway.mode local 2>/dev/null || true
 
@@ -799,77 +787,51 @@ mkdir -p ~/.openclaw/agents/main/sessions
 mkdir -p ~/.openclaw/agents/main/agent
 mkdir -p ~/.openclaw/credentials
 
-echo ""
-echo "安装完成！"
+# 验证安装
 openclaw --version
-echo ""
-read -p "按回车键关闭此窗口..."
 "#;
         
-        let script_path = "/tmp/openclaw_install_openclaw.command";
-        std::fs::write(script_path, script_content)
-            .map_err(|e| format!("创建脚本失败: {}", e))?;
-        
-        std::process::Command::new("chmod")
-            .args(["+x", script_path])
-            .output()
-            .map_err(|e| format!("设置权限失败: {}", e))?;
-        
-        std::process::Command::new("open")
-            .arg(script_path)
-            .spawn()
-            .map_err(|e| format!("启动终端失败: {}", e))?;
-        
-        Ok("已打开安装终端".to_string())
-    } else {
-        // Linux
-        let script_content = r#"#!/bin/bash
-clear
-echo "========================================"
-echo "    OpenClaw 安装向导"
-echo "========================================"
-echo ""
-
-echo "正在安装 OpenClaw..."
-npm install -g openclaw@latest
-
-echo ""
-echo "初始化配置..."
-openclaw config set gateway.mode local 2>/dev/null || true
-
-mkdir -p ~/.openclaw/agents/main/sessions
-mkdir -p ~/.openclaw/agents/main/agent
-mkdir -p ~/.openclaw/credentials
-
-echo ""
-echo "安装完成！"
-openclaw --version
-echo ""
-read -p "按回车键关闭..."
-"#;
-        
-        let script_path = "/tmp/openclaw_install_openclaw.sh";
-        std::fs::write(script_path, script_content)
-            .map_err(|e| format!("创建脚本失败: {}", e))?;
-        
-        std::process::Command::new("chmod")
-            .args(["+x", script_path])
-            .output()
-            .map_err(|e| format!("设置权限失败: {}", e))?;
-        
-        // 尝试不同的终端
-        let terminals = ["gnome-terminal", "xfce4-terminal", "konsole", "xterm"];
-        for term in terminals {
-            if std::process::Command::new(term)
-                .args(["--", script_path])
-                .spawn()
-                .is_ok()
-            {
-                return Ok("已打开安装终端".to_string());
+        match shell::run_bash_output(script) {
+            Ok(output) => {
+                info!("[安装OpenClaw] 安装成功: {}", output);
+                Ok(format!("OpenClaw 安装成功！{}", output))
+            }
+            Err(e) => {
+                error!("[安装OpenClaw] 安装失败: {}", e);
+                Err(format!("OpenClaw 安装失败: {}", e))
             }
         }
+    } else {
+        // Linux: 静默执行安装
+        info!("[安装OpenClaw] Linux 静默安装模式...");
         
-        Err("无法启动终端，请手动运行: npm install -g openclaw".to_string())
+        let script = r#"
+set -e
+
+echo "正在安装 OpenClaw..."
+npm install -g openclaw@latest
+
+echo "初始化配置..."
+openclaw config set gateway.mode local 2>/dev/null || true
+
+mkdir -p ~/.openclaw/agents/main/sessions
+mkdir -p ~/.openclaw/agents/main/agent
+mkdir -p ~/.openclaw/credentials
+
+# 验证安装
+openclaw --version
+"#;
+        
+        match shell::run_bash_output(script) {
+            Ok(output) => {
+                info!("[安装OpenClaw] 安装成功: {}", output);
+                Ok(format!("OpenClaw 安装成功！{}", output))
+            }
+            Err(e) => {
+                error!("[安装OpenClaw] 安装失败: {}", e);
+                Err(format!("OpenClaw 安装失败: {}", e))
+            }
+        }
     }
 }
 

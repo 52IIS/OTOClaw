@@ -148,7 +148,7 @@ const handleDeleteProvider = async (providerName: string) => {
 
 <template>
   <div class="overflow-y-auto pr-2 h-full scroll-container">
-    <div class="space-y-6 max-w-4xl">
+    <div class="space-y-6">
       <Transition name="fade">
         <div v-if="error" class="p-4 text-red-300 rounded-xl border bg-red-500/20 border-red-500/50">
           <p class="mb-1 font-medium">加载配置失败</p>

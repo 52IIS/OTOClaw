@@ -7,33 +7,37 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc && vite build",
+    "sync-version": "node scripts/sync-version.js",
+    "build": "npm run sync-version && vue-tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "npm run sync-version && tauri build"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.2.0",
-    "@tauri-apps/plugin-shell": "^2.2.0",
     "@tauri-apps/plugin-fs": "^2.2.0",
-    "@tauri-apps/plugin-process": "^2.2.0",
     "@tauri-apps/plugin-notification": "^2.2.0",
-    "vue": "^3.5.13",
-    "pinia": "^2.3.0",
-    "@vueuse/motion": "^2.2.6",
+    "@tauri-apps/plugin-process": "^2.2.0",
+    "@tauri-apps/plugin-dialog": "^2.2.0",
+    "@tauri-apps/plugin-shell": "^2.2.0",
+    "@tauri-apps/plugin-opener": "^2.2.0",
     "@vueuse/core": "^11.3.0",
+    "@vueuse/motion": "^2.2.6",
+    "clsx": "^2.1.1",
     "lucide-vue-next": "^0.468.0",
-    "clsx": "^2.1.1"
+    "marked": "^17.0.5",
+    "pinia": "^2.3.0",
+    "vue": "^3.5.13"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.2.4",
     "@vitejs/plugin-vue": "^5.2.1",
-    "vue-tsc": "^2.2.0",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.16",
     "typescript": "^5.7.2",
-    "vite": "^6.0.5"
+    "vite": "^6.0.5",
+    "vue-tsc": "^2.2.0"
   }
 }

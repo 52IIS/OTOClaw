@@ -51,7 +51,7 @@ const failedCount = computed(() => diagnosticResults.value.filter(r => !r.passed
 
 <template>
   <div class="h-full overflow-y-auto scroll-container pr-2">
-    <div class="max-w-4xl space-y-6">
+    <div class="space-y-6">
       <div class="bg-dark-700 rounded-2xl p-6 border border-dark-500">
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center gap-3">

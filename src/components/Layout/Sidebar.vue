@@ -4,9 +4,13 @@ import {
   LayoutDashboard,
   Bot,
   MessageSquare,
+  MessageCircle,
   FlaskConical,
   ScrollText,
   Settings,
+  Sparkles,
+  Package,
+  Shield,
 } from 'lucide-vue-next'
 import type { PageType, ServiceStatus } from '../../vite-env.d'
 import clsx from 'clsx'
@@ -24,8 +28,12 @@ const emit = defineEmits<{
 
 const menuItems: { id: PageType; label: string; icon: any }[] = [
   { id: 'dashboard', label: '概览', icon: LayoutDashboard },
-  { id: 'ai', label: 'AI 配置', icon: Bot },
+  { id: 'chat', label: '聊天', icon: MessageCircle },
+  { id: 'agents', label: '智能体', icon: Bot },
+  { id: 'skills', label: '技能管理', icon: Package },
+  { id: 'ai', label: 'AI 配置', icon: Sparkles },
   { id: 'channels', label: '消息渠道', icon: MessageSquare },
+  { id: 'sandbox', label: '沙箱管理', icon: Shield },
   { id: 'testing', label: '测试诊断', icon: FlaskConical },
   { id: 'logs', label: '应用日志', icon: ScrollText },
   { id: 'settings', label: '设置', icon: Settings },

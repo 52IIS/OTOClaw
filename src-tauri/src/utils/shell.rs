@@ -378,11 +378,10 @@ pub fn run_openclaw(args: &[&str]) -> Result<String, String> {
     debug!("[Shell] 扩展 PATH: {}", extended_path);
     
     let output = if openclaw_path.ends_with(".cmd") {
-        // Windows: .cmd 文件需要通过 cmd /c 执行
-        let mut cmd_args = vec!["/c", &openclaw_path];
-        cmd_args.extend(args);
-        let mut cmd = Command::new("cmd");
-        cmd.args(&cmd_args)
+        // Windows: 直接执行 .cmd 文件，让系统关联的 cmd.exe 处理
+        // 避免手动调用 cmd /c 导致的引号转义问题
+        let mut cmd = Command::new(&openclaw_path);
+        cmd.args(args)
             .env("OPENCLAW_GATEWAY_TOKEN", DEFAULT_GATEWAY_TOKEN)
             .env("PATH", &extended_path);
         
@@ -481,12 +480,12 @@ pub fn spawn_openclaw_gateway() -> io::Result<()> {
     let extended_path = get_extended_path();
     info!("[Shell] 扩展 PATH: {}", extended_path);
     
-    // Windows 上 .cmd 文件需要通过 cmd /c 来执行
+    // Windows 上直接执行 .cmd 文件，让系统关联的 cmd.exe 处理
     // 设置环境变量 OPENCLAW_GATEWAY_TOKEN，这样所有子命令都能自动使用
     let mut cmd = if openclaw_path.ends_with(".cmd") {
-        info!("[Shell] Windows 模式: 使用 cmd /c 执行");
-        let mut c = Command::new("cmd");
-        c.args(["/c", &openclaw_path, "gateway", "--port", "18789"]);
+        info!("[Shell] Windows 模式: 直接执行 .cmd");
+        let mut c = Command::new(&openclaw_path);
+        c.args(["gateway", "--port", "18789"]);
         c
     } else {
         info!("[Shell] Unix 模式: 直接执行");
