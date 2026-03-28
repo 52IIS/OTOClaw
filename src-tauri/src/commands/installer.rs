@@ -401,28 +401,31 @@ if ($nodeVersion) {
 /// macOS 安装 Node.js
 /// 使用 nvm (Node Version Manager) 安装，无需 sudo 权限
 /// nvm 会将 Node.js 安装在用户目录下，避免管理员权限问题
-/// Homebrew 方式因需要 sudo 在 GUI 环境下不可靠
+/// 使用阿里云镜像源，避免 GitHub 连接问题
 async fn install_nodejs_macos() -> Result<InstallResult, String> {
     let script = r#"
 set -e
 
-# nvm 安装脚本（无需 sudo，安装到用户目录）
+# 使用阿里云镜像源安装 nvm
 export NVM_DIR="$HOME/.nvm"
 
 # 检查 nvm 是否已安装
 if [ ! -d "$NVM_DIR" ]; then
     echo "安装 nvm (Node Version Manager)..."
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-    
-    # 加载 nvm
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-else
-    # 加载已存在的 nvm
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    # 使用阿里云镜像下载 nvm 安装脚本
+    curl -o- https://gitee.com/mirrors/nvm/raw/master/install.sh | bash
 fi
+
+# 加载 nvm（兼容 fish/bash/zsh）
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
 
 # 验证 nvm 是否可用
 nvm --version
+
+# 设置 Node.js 下载镜像（阿里云）
+export NVM_NODEJS_ORG_MIRROR=https://npmmirror.com/mirrors/node
 
 # 安装 Node.js 22 LTS
 echo "使用 nvm 安装 Node.js 22..."
@@ -700,6 +703,7 @@ pub async fn open_install_terminal(install_type: String) -> Result<String, Strin
 
 /// 打开终端安装 Node.js
 /// macOS 使用 nvm 方式安装，无需 sudo 权限
+/// 使用阿里云镜像源，避免 GitHub 连接问题
 async fn open_nodejs_install_terminal() -> Result<String, String> {
     if platform::is_windows() {
         // Windows: 打开 PowerShell 执行安装
@@ -731,29 +735,32 @@ Read-Host "按回车键关闭此窗口"
         shell::run_powershell_output(script)?;
         Ok("已打开安装终端".to_string())
     } else if platform::is_macos() {
-        // macOS: 使用 nvm 安装，无需 sudo
-        info!("[安装Node.js] macOS nvm 安装模式...");
-        
+        // macOS: 使用 nvm 安装，使用阿里云镜像
+        info!("[安装Node.js] macOS nvm 安装模式（阿里云镜像）...");
+
         let script = r#"
 set -e
 
-# nvm 安装脚本（无需 sudo，安装到用户目录）
+# 使用阿里云镜像源安装 nvm
 export NVM_DIR="$HOME/.nvm"
 
 # 检查 nvm 是否已安装
 if [ ! -d "$NVM_DIR" ]; then
     echo "安装 nvm (Node Version Manager)..."
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-    
-    # 加载 nvm
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-else
-    # 加载已存在的 nvm
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    # 使用阿里云镜像下载 nvm 安装脚本
+    curl -o- https://gitee.com/mirrors/nvm/raw/master/install.sh | bash
 fi
+
+# 加载 nvm（兼容 fish/bash/zsh）
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
 
 # 验证 nvm 是否可用
 nvm --version
+
+# 设置 Node.js 下载镜像（阿里云）
+export NVM_NODEJS_ORG_MIRROR=https://npmmirror.com/mirrors/node
 
 # 安装 Node.js 22 LTS
 echo "使用 nvm 安装 Node.js 22..."
@@ -767,7 +774,7 @@ npm --version
 
 echo "Node.js 安装完成！安装目录: $(which node)"
 "#;
-        
+
         match shell::run_bash_output(script) {
             Ok(output) => {
                 info!("[安装Node.js] 安装成功: {}", output);
