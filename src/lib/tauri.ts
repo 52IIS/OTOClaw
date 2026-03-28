@@ -231,6 +231,20 @@ export const api = {
   saveAgentWorkspaceFile: (params: SaveWorkspaceFileParams) =>
     invokeWithLog<string>('save_agent_workspace_file', { params }),
 
+  // 内置智能体管理
+  getBuiltinAgents: () =>
+    invokeWithLog<BuiltinAgentsResult>('get_builtin_agents'),
+  getBuiltinAgentWorkspaceFiles: (agentId: string) =>
+    invokeWithLog<WorkspaceFilesResult>('get_builtin_agent_workspace_files', { agentId }),
+  saveBuiltinAgentWorkspaceFile: (params: SaveWorkspaceFileParams) =>
+    invokeWithLog<string>('save_builtin_agent_workspace_file', { params }),
+  getBuiltinAgentSkills: (agentId: string) =>
+    invokeWithLog<string[]>('get_builtin_agent_skills', { agentId }),
+  assignSkillToBuiltinAgent: (skillId: string, agentId: string) =>
+    invokeWithLog<string>('assign_skill_to_builtin_agent', { skillId, agentId }),
+  removeSkillFromBuiltinAgent: (skillId: string, agentId: string) =>
+    invokeWithLog<string>('remove_skill_from_builtin_agent', { skillId, agentId }),
+
   // 技能管理
   getSkillsList: () => invokeWithLog<SkillsListResult>('get_skills_list'),
   getBuiltinSkills: () => invokeWithLog<SkillInfo[]>('get_builtin_skills'),
@@ -272,6 +286,37 @@ export const api = {
   skipVersion: (version: string) =>
     invokeWithLog<string>('skip_version', { version }),
   cancelUpdate: () => invokeWithLog<string>('cancel_update'),
+
+  // 定时任务管理
+  getCronJobs: () => invokeWithLog<CronJobsListResult>('get_cron_jobs'),
+  getCronJob: (jobId: string) =>
+    invokeWithLog<CronJob>('get_cron_job', { jobId }),
+  createCronJob: (params: CreateCronJobParams) =>
+    invokeWithLog<CronJob>('create_cron_job', { params }),
+  updateCronJob: (params: UpdateCronJobParams) =>
+    invokeWithLog<CronJob>('update_cron_job', { params }),
+  deleteCronJob: (jobId: string) =>
+    invokeWithLog<string>('delete_cron_job', { jobId }),
+  toggleCronJob: (jobId: string, enabled: boolean) =>
+    invokeWithLog<CronJob>('toggle_cron_job', { jobId, enabled }),
+  runCronJob: (jobId: string) =>
+    invokeWithLog<CronJobRunResult>('run_cron_job', { jobId }),
+  getCronStats: () => invokeWithLog<CronStats>('get_cron_stats'),
+  validateCronExpression: (expr: string) =>
+    invokeWithLog<CronValidateResult>('validate_cron_expression', { expr }),
+  duplicateCronJob: (jobId: string) =>
+    invokeWithLog<CronJob>('duplicate_cron_job', { jobId }),
+  getCronJobHistory: (jobId: string, limit?: number) =>
+    invokeWithLog<Record<string, unknown>[]>('get_cron_job_history', { jobId, limit }),
+  importCronJobs: (jobsJson: string) =>
+    invokeWithLog<CronJobsListResult>('import_cron_jobs', { jobsJson }),
+  exportCronJobs: () => invokeWithLog<string>('export_cron_jobs'),
+  getCronRunLogs: (jobId: string, limit?: number) =>
+    invokeWithLog<CronRunLogResult>('get_cron_run_logs', { jobId, limit }),
+  getCronRunLogFiles: () =>
+    invokeWithLog<CronRunLogFilesResult>('get_cron_run_log_files'),
+  getCronRunLogFileContent: (fileName: string) =>
+    invokeWithLog<CronRunLogResult>('get_cron_run_log_file_content', { fileName }),
 };
 
 // 智能体相关类型
@@ -326,6 +371,22 @@ export interface AgentBindingsResult {
 export interface SetAgentBindingsParams {
   agentId: string;
   bindings: AgentChannelBinding[];
+}
+
+// 内置智能体相关类型
+export interface BuiltinAgentInfo {
+  id: string;
+  name: string;
+  description: string | null;
+  avatar: string | null;
+  isDefault: boolean;
+  workspace: string | null;
+  model: string | null;
+  skills: string[];
+}
+
+export interface BuiltinAgentsResult {
+  agents: BuiltinAgentInfo[];
 }
 
 // 工作区文件相关类型
@@ -502,4 +563,192 @@ export interface VersionInfo {
   build_number: number;
   release_date: string;
   release_notes: string | null;
+}
+
+// ============ 定时任务相关类型 ============
+
+export interface CronSchedule {
+  kind: 'at' | 'every' | 'cron';
+  at?: string;
+  everyMs?: number;
+  anchorMs?: number;
+  expr?: string;
+  tz?: string;
+  staggerMs?: number;
+}
+
+export interface CronPayload {
+  kind: 'systemEvent' | 'agentTurn';
+  text?: string;
+  message?: string;
+  model?: string;
+  fallbacks?: string[];
+  thinking?: string;
+  timeoutSeconds?: number;
+  allowUnsafeExternalContent?: boolean;
+  lightContext?: boolean;
+  deliver?: boolean;
+  channel?: string;
+  to?: string;
+  bestEffortDeliver?: boolean;
+}
+
+export interface CronDelivery {
+  mode?: string;
+  channel?: string;
+  to?: string;
+  accountId?: string;
+  bestEffort?: boolean;
+  failureDestination?: CronFailureDestination;
+}
+
+export interface CronFailureDestination {
+  channel?: string;
+  to?: string;
+  accountId?: string;
+  mode?: string;
+}
+
+export interface CronFailureAlert {
+  after?: number;
+  channel?: string;
+  to?: string;
+  cooldownMs?: number;
+  mode?: string;
+  accountId?: string;
+}
+
+export interface CronJobState {
+  nextRunAtMs?: number;
+  runningAtMs?: number;
+  lastRunAtMs?: number;
+  lastRunStatus?: string;
+  lastStatus?: string;
+  lastError?: string;
+  lastErrorReason?: string;
+  lastDurationMs?: number;
+  consecutiveErrors?: number;
+  lastFailureAlertAtMs?: number;
+  scheduleErrorCount?: number;
+  lastDeliveryStatus?: string;
+  lastDeliveryError?: string;
+  lastDelivered?: boolean;
+}
+
+export interface CronJob {
+  id: string;
+  name: string;
+  enabled: boolean;
+  schedule: CronSchedule;
+  agentId?: string;
+  sessionTarget: string;
+  wakeMode: string;
+  payload: CronPayload;
+  delivery?: CronDelivery;
+  failureAlert?: CronFailureAlert;
+  deleteAfterRun: boolean;
+  sessionKey?: string;
+  state: CronJobState;
+  createdAtMs: number;
+  updatedAtMs: number;
+}
+
+export interface CronJobsListResult {
+  jobs: CronJob[];
+  total: number;
+  enabledCount: number;
+  runningCount: number;
+}
+
+export interface CreateCronJobParams {
+  name: string;
+  schedule: CronSchedule;
+  payload: CronPayload;
+  agentId?: string;
+  sessionTarget?: string;
+  wakeMode?: string;
+  delivery?: CronDelivery;
+  failureAlert?: CronFailureAlert;
+  deleteAfterRun?: boolean;
+  sessionKey?: string;
+  enabled?: boolean;
+}
+
+export interface UpdateCronJobParams {
+  jobId: string;
+  name?: string;
+  enabled?: boolean;
+  schedule?: CronSchedule;
+  payload?: CronPayload;
+  agentId?: string;
+  sessionTarget?: string;
+  wakeMode?: string;
+  delivery?: CronDelivery;
+  failureAlert?: CronFailureAlert;
+  deleteAfterRun?: boolean;
+  sessionKey?: string;
+}
+
+export interface CronJobRunResult {
+  jobId: string;
+  status: string;
+  error?: string;
+  summary?: string;
+  sessionId?: string;
+  durationMs?: number;
+}
+
+export interface CronStats {
+  total: number;
+  enabled: number;
+  disabled: number;
+  running: number;
+  pending: number;
+  recentSuccess: number;
+  recentError: number;
+  runsLast24h: number;
+}
+
+export interface CronValidateResult {
+  valid: boolean;
+  error?: string;
+  nextRuns: number[];
+  description?: string;
+}
+
+export interface CronRunLogEntry {
+  ts: number;
+  jobId: string;
+  jobName?: string;
+  action: string;
+  status?: string;
+  error?: string;
+  summary?: string;
+  runAtMs?: number;
+  durationMs?: number;
+  nextRunAtMs?: number;
+  deliveryStatus?: string;
+  sessionId?: string;
+  sessionKey?: string;
+  model?: string;
+  provider?: string;
+}
+
+export interface CronRunLogResult {
+  entries: CronRunLogEntry[];
+  total: number;
+  hasMore: boolean;
+}
+
+export interface CronRunLogFile {
+  name: string;
+  path: string;
+  size: number;
+  modifiedMs: number;
+  entryCount: number;
+}
+
+export interface CronRunLogFilesResult {
+  files: CronRunLogFile[];
+  total: number;
 }

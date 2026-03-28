@@ -1,3 +1,4 @@
+use crate::utils::text::compare_versions;
 use crate::utils::{platform, shell};
 use serde::{Deserialize, Serialize};
 use tauri::command;
@@ -1016,38 +1017,6 @@ fn get_latest_openclaw_version() -> Option<String> {
             None
         }
     }
-}
-
-/// 比较版本号，返回是否有更新可用
-/// current: 当前版本 (如 "1.0.0" 或 "v1.0.0")
-/// latest: 最新版本 (如 "1.0.1")
-fn compare_versions(current: &str, latest: &str) -> bool {
-    // 移除可能的 'v' 前缀和空白
-    let current = current.trim().trim_start_matches('v');
-    let latest = latest.trim().trim_start_matches('v');
-    
-    // 分割版本号
-    let current_parts: Vec<u32> = current
-        .split('.')
-        .filter_map(|s| s.parse().ok())
-        .collect();
-    let latest_parts: Vec<u32> = latest
-        .split('.')
-        .filter_map(|s| s.parse().ok())
-        .collect();
-    
-    // 比较每个部分
-    for i in 0..3 {
-        let c = current_parts.get(i).unwrap_or(&0);
-        let l = latest_parts.get(i).unwrap_or(&0);
-        if l > c {
-            return true;
-        } else if l < c {
-            return false;
-        }
-    }
-    
-    false
 }
 
 /// 更新 OpenClaw

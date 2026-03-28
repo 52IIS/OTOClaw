@@ -17,6 +17,7 @@ import { api, isTauri, type AgentInfo, type AgentsListResult, type AIConfigOverv
 import { useDialog } from '../../composables/useDialog'
 import AgentDialog from './AgentDialog.vue'
 import AgentChannelBindingDialog from './AgentChannelBindingDialog.vue'
+import TopAgent from './topAgent.vue'
 
 const { alert, confirm } = useDialog()
 
@@ -29,6 +30,7 @@ const showAddDialog = ref(false)
 const editingAgent = ref<AgentInfo | null>(null)
 const showChannelBindingDialog = ref(false)
 const bindingAgent = ref<AgentInfo | null>(null)
+const showTopAgentDialog = ref(false)
 
 const agents = computed(() => agentsResult.value?.agents || [])
 const defaultId = computed(() => agentsResult.value?.defaultId)
@@ -93,6 +95,14 @@ const handleChannelBindingClose = () => {
 const handleChannelBindingSave = () => {
   loadData()
   handleChannelBindingClose()
+}
+
+const handleOpenTopAgent = () => {
+  showTopAgentDialog.value = true
+}
+
+const handleCloseTopAgent = () => {
+  showTopAgentDialog.value = false
 }
 
 const handleSetDefault = async (agentId: string) => {
@@ -166,6 +176,10 @@ const getModelDisplay = (agent: AgentInfo) => {
             </h2>
             <p class="mt-1 text-sm text-gray-500">创建和管理多个AI智能体，每个智能体可以有独立的配置和工作区</p>
           </div>
+          <button @click="handleOpenTopAgent" class="flex gap-2 items-center px-3 py-2 text-sm text-gray-300 rounded-lg transition-colors bg-dark-600 hover:bg-dark-500">
+            <Bot :size="16" />
+            管理内置智能体
+          </button>
           <button @click="handleAddAgent" class="flex gap-2 items-center btn-primary">
             <Plus :size="16" />
             新建智能体
@@ -356,6 +370,16 @@ const getModelDisplay = (agent: AgentInfo) => {
           :agent="bindingAgent"
           @close="handleChannelBindingClose"
           @save="handleChannelBindingSave"
+        />
+      </Transition>
+    </Teleport>
+
+    <Teleport to="body">
+      <Transition name="fade">
+        <TopAgent
+          v-if="showTopAgentDialog"
+          @close="handleCloseTopAgent"
+          @save="loadData"
         />
       </Transition>
     </Teleport>

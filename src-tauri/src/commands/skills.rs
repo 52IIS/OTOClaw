@@ -1,3 +1,7 @@
+use crate::commands::common::{
+    get_agent_skills_dir, get_bundled_skills_dir, get_managed_skills_dir, get_skill_dir,
+    join_path, load_openclaw_config, save_openclaw_config,
+};
 use crate::models::{
     CreateSkillParams, ExportSkillParams, ExportSkillResult, InstallSkillParams,
     InstallSkillResult, SkillConfigEntry, SkillDetail, SkillInfo, SkillInstallOption,
@@ -20,68 +24,6 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 const SKILL_FILENAME: &str = "SKILL.md";
 const EXCLUDE_DIRS: [&str; 6] = [".git", ".svn", ".hg", "__pycache__", "node_modules", ".DS_Store"];
-
-fn load_openclaw_config() -> Result<Value, String> {
-    let config_path = platform::get_config_file_path();
-    if !file::file_exists(&config_path) {
-        return Ok(json!({}));
-    }
-    let content = file::read_file(&config_path).map_err(|e| format!("Failed to read config: {}", e))?;
-    serde_json::from_str(&content).map_err(|e| format!("Failed to parse config: {}", e))
-}
-
-fn save_openclaw_config(config: &Value) -> Result<(), String> {
-    let config_path = platform::get_config_file_path();
-    let content = serde_json::to_string_pretty(config).map_err(|e| format!("Failed to serialize: {}", e))?;
-    file::write_file(&config_path, &content).map_err(|e| format!("Failed to write config: {}", e))
-}
-
-fn get_bundled_skills_dir() -> String {
-    let config_dir = platform::get_config_dir();
-    if platform::is_windows() {
-        format!("{}\\skills", config_dir)
-    } else {
-        format!("{}/skills", config_dir)
-    }
-}
-
-fn get_managed_skills_dir() -> String {
-    let config_dir = platform::get_config_dir();
-    if platform::is_windows() {
-        format!("{}\\managed-skills", config_dir)
-    } else {
-        format!("{}/managed-skills", config_dir)
-    }
-}
-
-fn get_agent_skills_dir(agent_id: &str) -> String {
-    let config_dir = platform::get_config_dir();
-    if platform::is_windows() {
-        format!("{}\\workspace-{}\\skills", config_dir, agent_id)
-    } else {
-        format!("{}/workspace-{}/skills", config_dir, agent_id)
-    }
-}
-
-fn get_skill_dir(skill_id: &str, source: &str, agent_id: Option<&str>) -> String {
-    if let Some(aid) = agent_id {
-        let skills_dir = get_agent_skills_dir(aid);
-        return join_path(&skills_dir, skill_id);
-    }
-    match source {
-        "bundled" => join_path(&get_bundled_skills_dir(), skill_id),
-        "managed" => join_path(&get_managed_skills_dir(), skill_id),
-        _ => join_path(&get_managed_skills_dir(), skill_id),
-    }
-}
-
-fn join_path(base: &str, name: &str) -> String {
-    if platform::is_windows() {
-        format!("{}\\{}", base, name)
-    } else {
-        format!("{}/{}", base, name)
-    }
-}
 
 fn parse_skill_frontmatter(content: &str) -> Option<Value> {
     let content = content.trim();
@@ -120,10 +62,54 @@ fn check_env_exists(env_key: &str) -> bool {
     std::env::var(env_key).is_ok()
 }
 
+fn normalize_skill_id(raw: &str) -> String {
+    raw.to_lowercase().replace(' ', "-").replace('_', "-")
+}
+
+fn resolve_skill_key(frontmatter: &Value, name: &str) -> String {
+    extract_openclaw_metadata(frontmatter)
+        .and_then(|metadata| metadata.get("skillKey"))
+        .and_then(|value| value.as_str())
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| normalize_skill_id(name))
+}
+
 fn get_skill_config_from_openclaw(skill_id: &str, config: &Value) -> Option<SkillConfigEntry> {
     config
         .pointer(&format!("/skills/entries/{}", skill_id))
         .and_then(|v| serde_json::from_value(v.clone()).ok())
+}
+
+fn get_skill_config_with_fallback(skill_id: &str, legacy_skill_id: Option<&str>, config: &Value) -> Option<SkillConfigEntry> {
+    get_skill_config_from_openclaw(skill_id, config).or_else(|| {
+        legacy_skill_id
+            .filter(|legacy_id| *legacy_id != skill_id)
+            .and_then(|legacy_id| get_skill_config_from_openclaw(legacy_id, config))
+    })
+}
+
+fn ensure_skill_config_entry(skill_id: &str) -> Result<(), String> {
+    let mut config = load_openclaw_config()?;
+    if config.get("skills").is_none() {
+        config["skills"] = json!({});
+    }
+    if config["skills"].get("entries").is_none() {
+        config["skills"]["entries"] = json!({});
+    }
+    if config["skills"]["entries"].get(skill_id).is_none() {
+        let default_entry = SkillConfigEntry {
+            enabled: true,
+            api_key: None,
+            env: HashMap::new(),
+            config: json!(null),
+        };
+        config["skills"]["entries"][skill_id] = serde_json::to_value(&default_entry)
+            .map_err(|e| format!("Failed to serialize: {}", e))?;
+        save_openclaw_config(&config)?;
+    }
+    Ok(())
 }
 
 fn parse_skill_file(file_path: &str, source: &str, bundled: bool, config: Option<&Value>) -> Option<SkillInfo> {
@@ -151,8 +137,9 @@ fn parse_skill_file(file_path: &str, source: &str, bundled: bool, config: Option
         .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
         .unwrap_or_default();
 
-    let id = name.to_lowercase().replace(' ', "-").replace('_', "-");
-    let skill_config = config.and_then(|c| get_skill_config_from_openclaw(&id, c));
+    let legacy_id = normalize_skill_id(&name);
+    let id = resolve_skill_key(&frontmatter, &name);
+    let skill_config = config.and_then(|c| get_skill_config_with_fallback(&id, Some(&legacy_id), c));
     let is_disabled = skill_config.as_ref().map(|c| !c.enabled).unwrap_or(false);
 
     let bins_available: bool = required_bins.iter().all(|b| check_bin_exists(b));
@@ -378,13 +365,14 @@ pub async fn get_skill_detail(skill_id: String) -> Result<SkillDetail, String> {
         None
     };
 
-    let skill_config = get_skill_config_from_openclaw(&skill_id, &config);
-
     let metadata = if let Some(ref content) = skill_md_content {
         parse_skill_frontmatter(content).and_then(|f| extract_openclaw_metadata(&f).cloned())
     } else {
         None
     };
+
+    let legacy_skill_id = normalize_skill_id(&skill.name);
+    let skill_config = get_skill_config_with_fallback(&skill_id, Some(&legacy_skill_id), &config);
 
     let primary_env = metadata.as_ref()
         .and_then(|m| m.get("primaryEnv"))
@@ -409,14 +397,15 @@ pub async fn get_skill_detail(skill_id: String) -> Result<SkillDetail, String> {
 pub async fn create_skill(params: CreateSkillParams) -> Result<SkillInfo, String> {
     info!("[Skills] Creating skill: {}", params.name);
 
-    let skill_id = params.name.to_lowercase()
-        .chars()
-        .map(|c| if c.is_alphanumeric() { c } else { '-' })
-        .collect::<String>()
-        .trim_matches('-')
-        .to_string();
+    let skill_md_content = params.skill_md_content.clone().unwrap_or_else(|| {
+        generate_skill_md_template(&params.name, &params.description, &params.emoji, &params.homepage, &params.required_env, &params.required_bins)
+    });
 
-    if skill_id.is_empty() {
+    let frontmatter = parse_skill_frontmatter(&skill_md_content)
+        .ok_or_else(|| "Invalid SKILL.md frontmatter".to_string())?;
+    let skill_id = resolve_skill_key(&frontmatter, &params.name);
+
+    if skill_id.trim().is_empty() {
         return Err("Invalid skill name".to_string());
     }
 
@@ -434,12 +423,12 @@ pub async fn create_skill(params: CreateSkillParams) -> Result<SkillInfo, String
 
     fs::create_dir_all(&target_dir).map_err(|e| format!("Failed to create directory: {}", e))?;
 
-    let skill_md_content = params.skill_md_content.unwrap_or_else(|| {
-        generate_skill_md_template(&params.name, &params.description, &params.emoji, &params.homepage, &params.required_env, &params.required_bins)
-    });
-
     let skill_file = join_path(&target_dir, SKILL_FILENAME);
     file::write_file(&skill_file, &skill_md_content).map_err(|e| format!("Failed to write SKILL.md: {}", e))?;
+
+    if params.agent_id.is_none() {
+        ensure_skill_config_entry(&skill_id)?;
+    }
 
     info!("[Skills] Skill {} created successfully", skill_id);
 
@@ -625,7 +614,7 @@ pub async fn install_skill_from_zip(params: InstallSkillParams) -> Result<Instal
 
         if let Some(frontmatter) = parse_skill_frontmatter(&content) {
             let name = frontmatter.get("name").and_then(|v| v.as_str()).unwrap_or("unknown");
-            let skill_id = name.to_lowercase().replace(' ', "-").replace('_', "-");
+            let skill_id = resolve_skill_key(&frontmatter, name);
 
             let scan_warnings = scan_skill_content(&content);
             warnings.extend(scan_warnings);
@@ -644,6 +633,10 @@ pub async fn install_skill_from_zip(params: InstallSkillParams) -> Result<Instal
             }
 
             copy_dir_all(&skill_dir, &target_dir).map_err(|e| format!("Failed to copy files: {}", e))?;
+
+            if params.agent_id.is_none() {
+                ensure_skill_config_entry(&skill_id)?;
+            }
 
             installed_skill_id = Some(skill_id);
             installed_skill_name = Some(name.to_string());

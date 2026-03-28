@@ -6,7 +6,7 @@ declare module '*.vue' {
   export default component
 }
 
-export type PageType = 'dashboard' | 'chat' | 'agents' | 'skills' | 'ai' | 'channels' | 'sandbox' | 'testing' | 'logs' | 'settings';
+export type PageType = 'dashboard' | 'chat' | 'agents' | 'skills' | 'ai' | 'channels' | 'sandbox' | 'cron' | 'testing' | 'logs' | 'settings';
 
 export interface EnvironmentStatus {
   node_installed: boolean;

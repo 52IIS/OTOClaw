@@ -1,11 +1,10 @@
+use crate::utils::text::compare_versions;
 use crate::models::updater::*;
 use crate::utils::platform;
 use chrono::Utc;
 use dirs::home_dir;
 use log::{error, info, warn};
 use reqwest::Client;
-use semver::Version;
-use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -154,37 +153,6 @@ fn matches_pattern(name: &str, pattern: &str) -> bool {
         name.starts_with(pattern.trim_end_matches('*'))
     } else {
         name.ends_with(pattern)
-    }
-}
-
-fn compare_versions(current: &str, latest: &str) -> bool {
-    let current = current.trim().trim_start_matches('v');
-    let latest = latest.trim().trim_start_matches('v');
-    
-    match (Version::parse(current), Version::parse(latest)) {
-        (Ok(c), Ok(l)) => l > c,
-        _ => {
-            let current_parts: Vec<u32> = current
-                .split('.')
-                .filter_map(|s| s.parse().ok())
-                .collect();
-            let latest_parts: Vec<u32> = latest
-                .split('.')
-                .filter_map(|s| s.parse().ok())
-                .collect();
-            
-            for i in 0..3 {
-                let c = current_parts.get(i).unwrap_or(&0);
-                let l = latest_parts.get(i).unwrap_or(&0);
-                if l > c {
-                    return true;
-                } else if l < c {
-                    return false;
-                }
-            }
-            
-            false
-        }
     }
 }
 

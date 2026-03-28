@@ -359,6 +359,30 @@ fn get_windows_openclaw_paths() -> Vec<String> {
         }
     }
     
+    // 5. 直接通过 where openclaw.cmd 查找 openclaw 的实际安装路径
+    // 兼容 openclaw 与 node 分离安装的情况（如 node 在 D:\Program Files\nodejs，openclaw 在 D:\nodejs\node_global）
+    if let Ok(output) = run_cmd_output("where openclaw.cmd") {
+        for line in output.lines() {
+            let openclaw_path = line.trim();
+            if !openclaw_path.is_empty() {
+                paths.push(openclaw_path.to_string());
+            }
+        }
+    }
+    
+    // 6. 也尝试查找不带 .cmd 后缀的 openclaw（兼容某些安装方式）
+    if let Ok(output) = run_cmd_output("where openclaw") {
+        for line in output.lines() {
+            let openclaw_path = line.trim();
+            if !openclaw_path.is_empty() {
+                // 过滤掉 .cmd 文件（因为第 5 步已经添加过了）
+                if !openclaw_path.ends_with(".cmd") {
+                    paths.push(openclaw_path.to_string());
+                }
+            }
+        }
+    }
+    
     paths
 }
 

@@ -1,85 +1,8 @@
+use crate::utils::text::{extract_json_from_output, strip_ansi_codes};
 use crate::models::{AITestResult, ChannelTestResult, DiagnosticResult, SystemInfo};
 use crate::utils::{platform, shell};
 use tauri::command;
 use log::{info, warn, error, debug};
-
-/// 去除 ANSI 转义序列（颜色代码等）
-fn strip_ansi_codes(input: &str) -> String {
-    // 匹配 ANSI 转义序列: ESC[ ... m 或 ESC[ ... 其他控制字符
-    let mut result = String::with_capacity(input.len());
-    let mut chars = input.chars().peekable();
-    
-    while let Some(c) = chars.next() {
-        if c == '\x1b' {
-            // 跳过 ESC[...m 序列
-            if chars.peek() == Some(&'[') {
-                chars.next(); // 跳过 '['
-                // 跳过直到遇到字母
-                while let Some(&next) = chars.peek() {
-                    chars.next();
-                    if next.is_ascii_alphabetic() {
-                        break;
-                    }
-                }
-            }
-        } else {
-            result.push(c);
-        }
-    }
-    result
-}
-
-/// 从混合输出中提取 JSON 内容
-fn extract_json_from_output(output: &str) -> Option<String> {
-    // 先去除 ANSI 颜色代码
-    let clean_output = strip_ansi_codes(output);
-    
-    // 按行查找 JSON 开始位置
-    let lines: Vec<&str> = clean_output.lines().collect();
-    let mut json_start_line = None;
-    let mut json_end_line = None;
-    
-    // 找到 JSON 开始行：
-    // - 以 { 开头（JSON 对象）
-    // - 或以 [" 或 [数字 开头（真正的 JSON 数组，不是 [plugins] 这样的文本）
-    for (i, line) in lines.iter().enumerate() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('{') {
-            json_start_line = Some(i);
-            break;
-        }
-        // 检查是否是真正的 JSON 数组（以 [" 或 [数字 或 [{ 开头）
-        if trimmed.starts_with('[') && trimmed.len() > 1 {
-            let second_char = trimmed.chars().nth(1).unwrap_or(' ');
-            if second_char == '"' || second_char == '{' || second_char == '[' || second_char.is_ascii_digit() {
-                json_start_line = Some(i);
-                break;
-            }
-        }
-    }
-    
-    // 找到 JSON 结束行（以 } 或 ] 结尾的行，从后往前找）
-    for (i, line) in lines.iter().enumerate().rev() {
-        let trimmed = line.trim();
-        if trimmed == "}" || trimmed == "}," || trimmed.ends_with('}') {
-            json_end_line = Some(i);
-            break;
-        }
-        if trimmed == "]" || trimmed == "]," {
-            json_end_line = Some(i);
-            break;
-        }
-    }
-    
-    match (json_start_line, json_end_line) {
-        (Some(start), Some(end)) if start <= end => {
-            let json_lines: Vec<&str> = lines[start..=end].to_vec();
-            let json_str = json_lines.join("\n");
-            Some(json_str)
-        }
-        _ => None,
-    }
-}
 
 /// 运行诊断
 #[command]
@@ -746,7 +669,8 @@ pub async fn run_openclaw_fix() -> Result<FixResult, String> {
             } else if success {
                 "修复完成".to_string()
             } else {
-                "修复过程中遇到问题".to_string()
+                "修复过程".to_string()
+                // "修复过程中遇到问题".to_string()
             };
             
             info!("[修复] 结果: {}", message);

@@ -1,67 +1,16 @@
+use crate::commands::common::{get_pids_on_port, kill_process};
 use crate::models::ServiceStatus;
 use crate::utils::shell;
 use tauri::command;
-use std::process::Command;
 use log::{info, debug};
-
-#[cfg(windows)]
-use std::os::windows::process::CommandExt;
-
-/// Windows CREATE_NO_WINDOW 标志，用于隐藏控制台窗口
-#[cfg(windows)]
-const CREATE_NO_WINDOW: u32 = 0x08000000;
+use std::process::Command;
 
 const SERVICE_PORT: u16 = 18789;
-
-/// 检测端口是否有服务在监听，返回 PID
-/// 简单直接：端口被占用 = 服务运行中
-fn check_port_listening(port: u16) -> Option<u32> {
-    #[cfg(unix)]
-    {
-        let output = Command::new("lsof")
-            .args(["-ti", &format!(":{}", port)])
-            .output()
-            .ok()?;
-        
-        if output.status.success() {
-            String::from_utf8_lossy(&output.stdout)
-                .lines()
-                .next()
-                .and_then(|line| line.trim().parse::<u32>().ok())
-        } else {
-            None
-        }
-    }
-    
-    #[cfg(windows)]
-    {
-        let mut cmd = Command::new("netstat");
-        cmd.args(["-ano"]);
-        cmd.creation_flags(CREATE_NO_WINDOW);
-        
-        let output = cmd.output().ok()?;
-        
-        if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            for line in stdout.lines() {
-                if line.contains(&format!(":{}", port)) && line.contains("LISTENING") {
-                    if let Some(pid_str) = line.split_whitespace().last() {
-                        if let Ok(pid) = pid_str.parse::<u32>() {
-                            return Some(pid);
-                        }
-                    }
-                }
-            }
-        }
-        None
-    }
-}
 
 /// 获取服务状态（简单版：直接检查端口占用）
 #[command]
 pub async fn get_service_status() -> Result<ServiceStatus, String> {
-    // 简单直接：检查端口是否被占用
-    let pid = check_port_listening(SERVICE_PORT);
+    let pid = get_pids_on_port(SERVICE_PORT).into_iter().next();
     let running = pid.is_some();
     
     Ok(ServiceStatus {
@@ -103,7 +52,7 @@ pub async fn start_service() -> Result<String, String> {
     info!("[服务] 等待端口 {} 开始监听...", SERVICE_PORT);
     for i in 1..=15 {
         std::thread::sleep(std::time::Duration::from_secs(1));
-        if let Some(pid) = check_port_listening(SERVICE_PORT) {
+        if let Some(pid) = get_pids_on_port(SERVICE_PORT).into_iter().next() {
             info!("[服务] ✓ 启动成功 ({}秒), PID: {}", i, pid);
             return Ok(format!("服务已启动，PID: {}", pid));
         }
@@ -114,74 +63,6 @@ pub async fn start_service() -> Result<String, String> {
     
     info!("[服务] 等待超时，端口仍未监听");
     Err("服务启动超时（15秒），请检查 openclaw 日志".to_string())
-}
-
-/// 获取监听指定端口的所有 PID
-fn get_pids_on_port(port: u16) -> Vec<u32> {
-    #[cfg(unix)]
-    {
-        let output = Command::new("lsof")
-            .args(["-ti", &format!(":{}", port)])
-            .output();
-        
-        match output {
-            Ok(out) if out.status.success() => {
-                String::from_utf8_lossy(&out.stdout)
-                    .lines()
-                    .filter_map(|line| line.trim().parse::<u32>().ok())
-                    .collect()
-            }
-            _ => vec![],
-        }
-    }
-    
-    #[cfg(windows)]
-    {
-        let mut cmd = Command::new("netstat");
-        cmd.args(["-ano"]);
-        cmd.creation_flags(CREATE_NO_WINDOW);
-        
-        match cmd.output() {
-            Ok(out) if out.status.success() => {
-                let stdout = String::from_utf8_lossy(&out.stdout);
-                stdout.lines()
-                    .filter(|line| line.contains(&format!(":{}", port)) && line.contains("LISTENING"))
-                    .filter_map(|line| line.split_whitespace().last())
-                    .filter_map(|pid_str| pid_str.parse::<u32>().ok())
-                    .collect()
-            }
-            _ => vec![],
-        }
-    }
-}
-
-/// 通过 PID 杀死进程
-fn kill_process(pid: u32, force: bool) -> bool {
-    info!("[服务] 杀死进程 PID: {}, force: {}", pid, force);
-    
-    #[cfg(unix)]
-    {
-        let signal = if force { "-9" } else { "-TERM" };
-        Command::new("kill")
-            .args([signal, &pid.to_string()])
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    }
-    
-    #[cfg(windows)]
-    {
-        let mut cmd = Command::new("taskkill");
-        if force {
-            cmd.args(["/F", "/PID", &pid.to_string()]);
-        } else {
-            cmd.args(["/PID", &pid.to_string()]);
-        }
-        cmd.creation_flags(CREATE_NO_WINDOW);
-        cmd.output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    }
 }
 
 /// 停止服务（通过杀死监听端口的进程）

@@ -1,11 +1,15 @@
 pub mod agents;
 pub mod chat;
+pub mod common;
 pub mod config;
+pub mod cron;
 pub mod diagnostics;
+pub mod gateway;
 pub mod installer;
 pub mod process;
 pub mod prompt;
 pub mod sandbox;
 pub mod service;
 pub mod skills;
+pub mod topAgent;
 pub mod updater;

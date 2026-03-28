@@ -8,7 +8,7 @@ mod commands;
 mod models;
 mod utils;
 
-use commands::{agents, chat, config, diagnostics, installer, process, prompt, sandbox, service, skills, updater};
+use commands::{agents, chat, config, cron, diagnostics, installer, process, prompt, sandbox, service, skills, topAgent, updater};
 
 fn main() {
     // 初始化日志 - 默认显示 info 级别日志
@@ -65,12 +65,15 @@ fn main() {
             config::get_gateway_config,
             config::save_gateway_config,
             config::init_gateway_token,
+            // 企业微信多账号管理
+
             // 聊天会话管理
             chat::get_sessions,
             chat::get_session_messages,
             chat::connect_gateway,
             chat::disconnect_gateway,
             chat::create_session,
+            chat::patch_session,
             chat::delete_session,
             chat::send_chat_message,
             chat::check_gateway_status,
@@ -86,6 +89,13 @@ fn main() {
             agents::get_available_channels,
             agents::get_agent_workspace_files,
             agents::save_agent_workspace_file,
+            // 内置智能体管理
+            topAgent::get_builtin_agents,
+            topAgent::get_builtin_agent_workspace_files,
+            topAgent::save_builtin_agent_workspace_file,
+            topAgent::get_builtin_agent_skills,
+            topAgent::assign_skill_to_builtin_agent,
+            topAgent::remove_skill_from_builtin_agent,
             // 技能管理
             skills::get_skills_list,
             skills::get_builtin_skills,
@@ -132,17 +142,25 @@ fn main() {
             sandbox::get_sandbox_config,
             sandbox::save_sandbox_config,
             sandbox::validate_sandbox_config_cmd,
-            sandbox::list_sandbox_containers,
-            sandbox::stop_sandbox_container,
-            sandbox::remove_sandbox_container,
-            sandbox::prune_sandbox_containers,
-            sandbox::recreate_sandbox_container,
-            sandbox::check_docker_available_cmd,
-            sandbox::get_docker_version_cmd,
-            sandbox::pull_sandbox_image,
-            sandbox::build_sandbox_image,
             // 提示词优化
             prompt::optimize_prompt,
+            // 定时任务管理
+            cron::get_cron_jobs,
+            cron::get_cron_job,
+            cron::create_cron_job,
+            cron::update_cron_job,
+            cron::delete_cron_job,
+            cron::toggle_cron_job,
+            cron::run_cron_job,
+            cron::get_cron_stats,
+            cron::validate_cron_expression,
+            cron::duplicate_cron_job,
+            cron::get_cron_job_history,
+            cron::import_cron_jobs,
+            cron::export_cron_jobs,
+            cron::get_cron_run_logs,
+            cron::get_cron_run_log_files,
+            cron::get_cron_run_log_file_content,
         ])
         .run(tauri::generate_context!())
         .expect("运行 Tauri 应用时发生错误");

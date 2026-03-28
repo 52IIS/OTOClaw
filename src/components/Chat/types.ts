@@ -7,6 +7,9 @@ export interface ChatMessage {
   attachments?: ChatAttachment[]
   thinking?: ThinkingContent
   toolCalls?: ToolCall[]
+  toolResults?: ToolResult[]
+  artifacts?: Artifact[]
+  error?: ChatMessageError
 }
 
 export interface ThinkingContent {
@@ -30,6 +33,31 @@ export interface ToolCall {
   arguments: Record<string, unknown>
   result?: unknown
 }
+
+export interface ToolResult {
+  id: string
+  name: string
+  result: unknown
+}
+
+export interface Artifact {
+  id: string
+  kind: 'file' | 'image'
+  uri: string
+}
+
+export interface ChatMessageError {
+  message: string
+  timestamp: number
+}
+
+export type ClawEventType =
+  | { type: 'message'; role: 'assistant' | 'user'; content: string }
+  | { type: 'tool_call'; id: string; name: string; args: unknown }
+  | { type: 'tool_result'; id: string; name: string; result: unknown }
+  | { type: 'stream'; delta: string }
+  | { type: 'error'; message: string }
+  | { type: 'artifact'; kind: 'file' | 'image'; uri: string }
 
 export interface ChatSession {
   key: string
@@ -101,7 +129,7 @@ export interface ChatState {
   streaming: StreamingState
 }
 
-export type ChatEventState = 'delta' | 'final' | 'aborted' | 'error' | 'thinking_delta' | 'thinking_final'
+export type ChatEventState = 'delta' | 'final' | 'aborted' | 'error' | 'thinking_delta' | 'thinking_final' | 'tool_call' | 'tool_result' | 'artifact'
 
 export interface ChatEventPayload {
   runId: string
@@ -110,6 +138,9 @@ export interface ChatEventPayload {
   message?: ChatMessage
   errorMessage?: string
   thinking?: string
+  toolCall?: ToolCall
+  toolResult?: ToolResult
+  artifact?: Artifact
 }
 
 export interface ContentBlock {

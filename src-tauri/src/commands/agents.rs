@@ -1,10 +1,15 @@
+use crate::commands::common::{
+    get_agents_dir, get_agent_workspace_dir, join_path, load_openclaw_config,
+    path_separator, save_openclaw_config,
+};
 use crate::models::{
     AgentBinding, AgentBindingMatch, AgentBindingsResult, AgentChannelBinding, AgentConfig,
     AgentIdentityConfig, AgentInfo, AgentModelConfigFull, AgentsListResult, CreateAgentParams,
     DeleteAgentParams, SetAgentBindingsParams, SetDefaultAgentParams, UpdateAgentParams,
 };
-use crate::utils::{file, platform};
+use crate::utils::file;
 use log::{error, info, warn};
+use rand::Rng;
 use serde_json::{json, Value};
 use std::fs;
 use std::path::Path;
@@ -17,6 +22,12 @@ const SOUL_FILENAME: &str = "SOUL.md";
 const AGENTS_FILENAME: &str = "AGENTS.md";
 const USER_FILENAME: &str = "USER.md";
 const MEMORY_FILENAME: &str = "MEMORY.md";
+
+fn generate_numeric_agent_id() -> String {
+    let mut rng = rand::thread_rng();
+    let id: u64 = rng.gen_range(10000..999999999);
+    id.to_string()
+}
 
 fn get_default_identity_template(name: &str, emoji: Option<&str>) -> String {
     let emoji_line = if let Some(e) = emoji {
@@ -96,59 +107,6 @@ fn get_default_memory_template() -> String {
     ## 待跟进\n".to_string()
 }
 
-fn load_openclaw_config() -> Result<Value, String> {
-    let config_path = platform::get_config_file_path();
-
-    if !file::file_exists(&config_path) {
-        return Ok(json!({}));
-    }
-
-    let content =
-        file::read_file(&config_path).map_err(|e| format!("读取配置文件失败: {}", e))?;
-
-    serde_json::from_str(&content).map_err(|e| format!("解析配置文件失败: {}", e))
-}
-
-fn save_openclaw_config(config: &Value) -> Result<(), String> {
-    let config_path = platform::get_config_file_path();
-
-    let content =
-        serde_json::to_string_pretty(config).map_err(|e| format!("序列化配置失败: {}", e))?;
-
-    file::write_file(&config_path, &content).map_err(|e| format!("写入配置文件失败: {}", e))
-}
-
-fn normalize_agent_id(name: &str) -> String {
-    name.to_lowercase()
-        .chars()
-        .map(|c| if c.is_alphanumeric() { c } else { '-' })
-        .collect::<String>()
-        .trim_matches('-')
-        .to_string()
-}
-
-fn get_config_dir() -> String {
-    platform::get_config_dir()
-}
-
-fn get_agents_dir() -> String {
-    let config_dir = get_config_dir();
-    if platform::is_windows() {
-        format!("{}\\agents", config_dir)
-    } else {
-        format!("{}/agents", config_dir)
-    }
-}
-
-fn get_agent_workspace_dir(agent_id: &str) -> String {
-    let config_dir = get_config_dir();
-    if platform::is_windows() {
-        format!("{}\\workspace-{}", config_dir, agent_id)
-    } else {
-        format!("{}/workspace-{}", config_dir, agent_id)
-    }
-}
-
 fn ensure_agent_workspace(workspace_dir: &str, name: &str, emoji: Option<&str>) -> Result<(), String> {
     let path = Path::new(workspace_dir);
     if !path.exists() {
@@ -156,7 +114,7 @@ fn ensure_agent_workspace(workspace_dir: &str, name: &str, emoji: Option<&str>) 
             .map_err(|e| format!("创建工作区目录失败: {}", e))?;
     }
 
-    let sep = if platform::is_windows() { "\\" } else { "/" };
+    let sep = path_separator();
 
     let identity_path = format!("{}{}{}", workspace_dir, sep, IDENTITY_FILENAME);
     if !Path::new(&identity_path).exists() {
@@ -202,11 +160,7 @@ fn update_identity_file(
     emoji: Option<&str>,
     description: Option<&str>,
 ) -> Result<(), String> {
-    let identity_path = if platform::is_windows() {
-        format!("{}\\{}", workspace_dir, IDENTITY_FILENAME)
-    } else {
-        format!("{}/{}", workspace_dir, IDENTITY_FILENAME)
-    };
+    let identity_path = format!("{}{}{}", workspace_dir, path_separator(), IDENTITY_FILENAME);
 
     let mut content = String::new();
     content.push_str("# Agent Identity\n\n");
@@ -272,11 +226,7 @@ fn parse_identity_markdown(content: &str) -> IdentityFileInfo {
 }
 
 fn load_identity_from_workspace(workspace_dir: &str) -> Option<IdentityFileInfo> {
-    let identity_path = if platform::is_windows() {
-        format!("{}\\{}", workspace_dir, IDENTITY_FILENAME)
-    } else {
-        format!("{}/{}", workspace_dir, IDENTITY_FILENAME)
-    };
+    let identity_path = format!("{}{}{}", workspace_dir, path_separator(), IDENTITY_FILENAME);
     
     if !file::file_exists(&identity_path) {
         return None;
@@ -377,23 +327,24 @@ pub async fn get_agents_list() -> Result<AgentsListResult, String> {
                 .as_ref()
                 .and_then(|i| i.emoji.clone().or_else(|| i.avatar.clone()));
 
-            let (description, avatar) = if let Some(ref workspace) = agent.workspace {
+            let (name, description, avatar) = if let Some(ref workspace) = agent.workspace {
                 if let Some(identity_file) = load_identity_from_workspace(workspace) {
-                    let desc = identity_file.description.or_else(|| None);
+                    let n = identity_file.name.or_else(|| agent.name.clone());
+                    let desc = identity_file.description;
                     let av = identity_file.emoji.or(identity_file.avatar).or(config_avatar);
-                    (desc, av)
+                    (n, desc, av)
                 } else {
-                    (None, config_avatar)
+                    (agent.name.clone(), None, config_avatar)
                 }
             } else {
-                (None, config_avatar)
+                (agent.name.clone(), None, config_avatar)
             };
 
             let is_builtin = is_builtin_agent(&agent.id);
 
             agents.push(AgentInfo {
                 id: agent.id,
-                name: agent.name.unwrap_or_else(|| "未命名智能体".to_string()),
+                name: name.unwrap_or_else(|| "未命名智能体".to_string()),
                 description,
                 avatar,
                 is_default,
@@ -422,17 +373,12 @@ pub async fn get_agents_list() -> Result<AgentsListResult, String> {
 pub async fn create_agent(params: CreateAgentParams) -> Result<AgentInfo, String> {
     info!("[智能体管理] 创建智能体: {}", params.name);
 
-    let agent_id = normalize_agent_id(&params.name);
-
-    if agent_id == DEFAULT_AGENT_ID {
-        return Err("\"default\" 是保留的智能体ID".to_string());
-    }
-
     let mut config = load_openclaw_config()?;
-
     let agents = parse_agent_list(&config);
-    if find_agent_index(&agents, &agent_id).is_some() {
-        return Err(format!("智能体 \"{}\" 已存在", agent_id));
+
+    let mut agent_id = generate_numeric_agent_id();
+    while find_agent_index(&agents, &agent_id).is_some() {
+        agent_id = generate_numeric_agent_id();
     }
 
     let workspace_dir = params.workspace.clone().unwrap_or_else(|| {
@@ -642,11 +588,7 @@ pub async fn delete_agent(params: DeleteAgentParams) -> Result<String, String> {
         }
 
         let agents_dir = get_agents_dir();
-        let agent_dir = if platform::is_windows() {
-            format!("{}\\{}", agents_dir, params.agent_id)
-        } else {
-            format!("{}/{}", agents_dir, params.agent_id)
-        };
+        let agent_dir = join_path(&agents_dir, &params.agent_id);
         if Path::new(&agent_dir).exists() {
             if let Err(e) = fs::remove_dir_all(&agent_dir) {
                 warn!("[智能体管理] 删除智能体目录失败: {}", e);
@@ -861,7 +803,7 @@ pub async fn get_agent_workspace_files(agent_id: String) -> Result<WorkspaceFile
     let workspace = agent.workspace.clone()
         .ok_or_else(|| format!("智能体 \"{}\" 没有工作区", agent_id))?;
 
-    let sep = if platform::is_windows() { "\\" } else { "/" };
+    let sep = path_separator();
     let filenames = [IDENTITY_FILENAME, SOUL_FILENAME, AGENTS_FILENAME, USER_FILENAME, MEMORY_FILENAME];
 
     let mut files = Vec::new();
@@ -917,7 +859,7 @@ pub async fn save_agent_workspace_file(params: SaveWorkspaceFileParams) -> Resul
     let workspace = agent.workspace.clone()
         .ok_or_else(|| format!("智能体 \"{}\" 没有工作区", params.agent_id))?;
 
-    let sep = if platform::is_windows() { "\\" } else { "/" };
+    let sep = path_separator();
     let file_path = format!("{}{}{}", workspace, sep, params.filename);
 
     file::write_file(&file_path, &params.content)

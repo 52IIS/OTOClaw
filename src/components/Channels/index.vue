@@ -13,8 +13,6 @@ import {
   ChevronRight,
   Apple,
   Bell,
-  Eye,
-  EyeOff,
   Play,
   QrCode,
   CheckCircle,
@@ -27,7 +25,10 @@ import {
 import clsx from 'clsx'
 import { useDialog } from '../../composables/useDialog'
 
+
 const { alert } = useDialog()
+
+
 
 interface FeishuPluginStatus {
   installed: boolean
@@ -165,15 +166,27 @@ const channelInfo: Record<string, ChannelInfo> = {
     ],
     helpText: '需要扫描二维码登录，运行: openclaw channels login --channel whatsapp',
   },
-  wechat: {
-    name: '微信',
+  wecom: {
+    name: '企业微信',
     icon: MessageSquare,
-    color: 'text-green-600',
+    color: 'text-blue-500',
     fields: [
-      { key: 'appId', label: 'App ID', type: 'text', placeholder: '微信开放平台 App ID' },
-      { key: 'appSecret', label: 'App Secret', type: 'password', placeholder: '微信开放平台 App Secret' },
+      { key: 'botId', label: 'Bot ID', type: 'text', placeholder: '企业微信机器人 Bot ID', required: true },
+      { key: 'secret', label: 'Secret', type: 'password', placeholder: '企业微信机器人 Secret', required: true },
+      { key: 'websocketUrl', label: 'WebSocket URL', type: 'text', placeholder: 'wss://openws.work.weixin.qq.com', required: true },
     ],
-    helpText: '微信公众号/企业微信配置',
+    helpText: '企业微信机器人配置，需要先安装官方插件: openclaw plugins install @wecom/wecom-openclaw-plugin',
+  },
+  qq: {
+    name: 'QQ',
+    icon: MessageCircle,
+    color: 'text-green-500',
+    fields: [
+      { key: 'appId', label: 'App ID', type: 'text', placeholder: 'QQ 机器人 App ID', required: true },
+      { key: 'appSecret', label: 'App Secret', type: 'password', placeholder: 'QQ 机器人 App Secret', required: true },
+      { key: 'botId', label: 'Bot ID', type: 'text', placeholder: 'QQ 机器人 Bot ID', required: true },
+    ],
+    helpText: 'QQ 机器人配置，需要先安装官方插件: openclaw plugins install @sliverp/qqbot',
   },
   dingtalk: {
     name: '钉钉',
@@ -208,6 +221,14 @@ const feishuPluginStatus = ref<FeishuPluginStatus | null>(null)
 const feishuPluginLoading = ref(false)
 const feishuPluginInstalling = ref(false)
 
+const wecomPluginStatus = ref<FeishuPluginStatus | null>(null)
+const wecomPluginLoading = ref(false)
+const wecomPluginInstalling = ref(false)
+
+const qqPluginStatus = ref<FeishuPluginStatus | null>(null)
+const qqPluginLoading = ref(false)
+const qqPluginInstalling = ref(false)
+
 const visiblePasswords = ref<Set<string>>(new Set())
 
 const togglePasswordVisibility = (fieldKey: string) => {
@@ -241,6 +262,58 @@ const handleInstallFeishuPlugin = async () => {
     await alert('安装失败: ' + e, { title: '安装失败', variant: 'error' })
   } finally {
     feishuPluginInstalling.value = false
+  }
+}
+
+const checkWecomPlugin = async () => {
+  wecomPluginLoading.value = true
+  try {
+    const status = await invoke<FeishuPluginStatus>('check_feishu_plugin', { pluginName: '@wecom/wecom-openclaw-plugin' })
+    wecomPluginStatus.value = status
+  } catch (e) {
+    console.error('检查企业微信插件失败:', e)
+    wecomPluginStatus.value = { installed: false, version: null, plugin_name: null }
+  } finally {
+    wecomPluginLoading.value = false
+  }
+}
+
+const handleInstallWecomPlugin = async () => {
+  wecomPluginInstalling.value = true
+  try {
+    const result = await invoke<string>('install_feishu_plugin', { pluginName: '@wecom/wecom-openclaw-plugin' })
+    await alert(result, { title: '安装结果', variant: 'success' })
+    await checkWecomPlugin()
+  } catch (e) {
+    await alert('安装失败: ' + e, { title: '安装失败', variant: 'error' })
+  } finally {
+    wecomPluginInstalling.value = false
+  }
+}
+
+const checkQQPlugin = async () => {
+  qqPluginLoading.value = true
+  try {
+    const status = await invoke<FeishuPluginStatus>('check_feishu_plugin', { pluginName: '@sliverp/qqbot' })
+    qqPluginStatus.value = status
+  } catch (e) {
+    console.error('检查QQ插件失败:', e)
+    qqPluginStatus.value = { installed: false, version: null, plugin_name: null }
+  } finally {
+    qqPluginLoading.value = false
+  }
+}
+
+const handleInstallQQPlugin = async () => {
+  qqPluginInstalling.value = true
+  try {
+    const result = await invoke<string>('install_feishu_plugin', { pluginName: '@sliverp/qqbot' })
+    await alert(result, { title: '安装结果', variant: 'success' })
+    await checkQQPlugin()
+  } catch (e) {
+    await alert('安装失败: ' + e, { title: '安装失败', variant: 'error' })
+  } finally {
+    qqPluginInstalling.value = false
   }
 }
 
@@ -387,6 +460,10 @@ const handleChannelSelect = (channelId: string, channelList?: ChannelConfig[]) =
     
     if (channel.channel_type === 'feishu') {
       checkFeishuPlugin()
+    } else if (channel.channel_type === 'wecom') {
+      checkWecomPlugin()
+    } else if (channel.channel_type === 'qq') {
+      checkQQPlugin()
     }
   } else {
     configForm.value = {}
@@ -448,11 +525,11 @@ const hasValidConfig = (channel: ChannelConfig) => {
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto scroll-container pr-2">
+  <div class="overflow-y-auto pr-2 h-full scroll-container">
     <div>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div class="md:col-span-1 space-y-2">
-          <h3 class="text-sm font-medium text-gray-400 mb-3 px-1">消息渠道</h3>
+      <div class="grid grid-cols-1 gap-6 md:grid-cols-3">
+        <div class="space-y-2 md:col-span-1">
+          <h3 class="px-1 mb-3 text-sm font-medium text-gray-400">消息渠道</h3>
           <button
             v-for="channel in channels"
             :key="channel.id"
@@ -480,7 +557,7 @@ const hasValidConfig = (channel: ChannelConfig) => {
               <p :class="['text-sm font-medium', selectedChannel === channel.id ? 'text-white' : 'text-gray-300']">
                 {{ channelInfo[channel.channel_type]?.name || channel.channel_type }}
               </p>
-              <div class="flex items-center gap-2 mt-1">
+              <div class="flex gap-2 items-center mt-1">
                 <template v-if="hasValidConfig(channel)">
                   <Check :size="12" class="text-green-400" />
                   <span class="text-xs text-green-400">已配置</span>
@@ -501,8 +578,8 @@ const hasValidConfig = (channel: ChannelConfig) => {
         <div class="md:col-span-2">
           <template v-if="currentChannel && currentInfo">
             <Transition name="fade-slide" mode="out-in">
-              <div :key="selectedChannel ?? ''" class="bg-dark-700 rounded-2xl p-6 border border-dark-500">
-                <div class="flex items-center gap-3 mb-4">
+              <div :key="selectedChannel ?? ''" class="p-6 rounded-2xl border bg-dark-700 border-dark-500">
+                <div class="flex gap-3 items-center mb-4">
                   <div :class="['w-10 h-10 rounded-lg flex items-center justify-center bg-dark-500', currentInfo.color]">
                     <component :is="currentInfo.icon" :size="20" />
                   </div>
@@ -514,32 +591,32 @@ const hasValidConfig = (channel: ChannelConfig) => {
 
                 <template v-if="currentChannel.channel_type === 'feishu'">
                   <div class="mb-4">
-                    <div v-if="feishuPluginLoading" class="p-4 bg-dark-600 rounded-xl border border-dark-500 flex items-center gap-3">
-                      <Loader2 :size="20" class="animate-spin text-gray-400" />
+                    <div v-if="feishuPluginLoading" class="flex gap-3 items-center p-4 rounded-xl border bg-dark-600 border-dark-500">
+                      <Loader2 :size="20" class="text-gray-400 animate-spin" />
                       <span class="text-gray-400">正在检查飞书插件状态...</span>
                     </div>
-                    <div v-else-if="feishuPluginStatus?.installed" class="p-4 bg-green-500/10 rounded-xl border border-green-500/30 flex items-center gap-3">
+                    <div v-else-if="feishuPluginStatus?.installed" class="flex gap-3 items-center p-4 rounded-xl border bg-green-500/10 border-green-500/30">
                       <Package :size="20" class="text-green-400" />
                       <div class="flex-1">
-                        <p class="text-green-400 font-medium">飞书插件已安装</p>
-                        <p class="text-xs text-gray-400 mt-0.5">
+                        <p class="font-medium text-green-400">飞书插件已安装</p>
+                        <p class="mt-0.5 text-xs text-gray-400">
                           {{ feishuPluginStatus.plugin_name || '@m1heng-clawd/feishu' }}
                           {{ feishuPluginStatus.version ? ` v${feishuPluginStatus.version}` : '' }}
                         </p>
                       </div>
                       <CheckCircle :size="16" class="text-green-400" />
                     </div>
-                    <div v-else class="p-4 bg-amber-500/10 rounded-xl border border-amber-500/30">
-                      <div class="flex items-start gap-3">
-                        <AlertTriangle :size="20" class="text-amber-400 mt-0.5" />
+                    <div v-else class="p-4 rounded-xl border bg-amber-500/10 border-amber-500/30">
+                      <div class="flex gap-3 items-start">
+                        <AlertTriangle :size="20" class="mt-0.5 text-amber-400" />
                         <div class="flex-1">
-                          <p class="text-amber-400 font-medium">需要安装飞书插件</p>
-                          <p class="text-xs text-gray-400 mt-1">飞书渠道需要先安装 @m1heng-clawd/feishu 插件才能使用。</p>
-                          <div class="mt-3 flex flex-wrap gap-2">
+                          <p class="font-medium text-amber-400">需要安装飞书插件</p>
+                          <p class="mt-1 text-xs text-gray-400">飞书渠道需要先安装 @m1heng-clawd/feishu 插件才能使用。</p>
+                          <div class="flex flex-wrap gap-2 mt-3">
                             <button
                               @click="handleInstallFeishuPlugin"
                               :disabled="feishuPluginInstalling"
-                              class="btn-primary flex items-center gap-2 text-sm py-2"
+                              class="flex gap-2 items-center py-2 text-sm btn-primary"
                             >
                               <Loader2 v-if="feishuPluginInstalling" :size="14" class="animate-spin" />
                               <Download v-else :size="14" />
@@ -548,7 +625,7 @@ const hasValidConfig = (channel: ChannelConfig) => {
                             <button
                               @click="checkFeishuPlugin"
                               :disabled="feishuPluginLoading"
-                              class="btn-secondary flex items-center gap-2 text-sm py-2"
+                              class="flex gap-2 items-center py-2 text-sm btn-secondary"
                             >
                               刷新状态
                             </button>
@@ -559,12 +636,107 @@ const hasValidConfig = (channel: ChannelConfig) => {
                   </div>
                 </template>
 
+                <template v-if="currentChannel.channel_type === 'wecom'">
+                  <div class="mb-4">
+                    <div v-if="wecomPluginLoading" class="flex gap-3 items-center p-4 rounded-xl border bg-dark-600 border-dark-500">
+                      <Loader2 :size="20" class="text-gray-400 animate-spin" />
+                      <span class="text-gray-400">正在检查企业微信插件状态...</span>
+                    </div>
+                    <div v-else-if="wecomPluginStatus?.installed" class="flex gap-3 items-center p-4 rounded-xl border bg-green-500/10 border-green-500/30">
+                      <Package :size="20" class="text-green-400" />
+                      <div class="flex-1">
+                        <p class="font-medium text-green-400">企业微信插件已安装</p>
+                        <p class="mt-0.5 text-xs text-gray-400">
+                          {{ wecomPluginStatus.plugin_name || '@wecom/wecom-openclaw-plugin' }}
+                          {{ wecomPluginStatus.version ? ` v${wecomPluginStatus.version}` : '' }}
+                        </p>
+                      </div>
+                      <CheckCircle :size="16" class="text-green-400" />
+                    </div>
+                    <div v-else class="p-4 rounded-xl border bg-amber-500/10 border-amber-500/30">
+                      <div class="flex gap-3 items-start">
+                        <AlertTriangle :size="20" class="mt-0.5 text-amber-400" />
+                        <div class="flex-1">
+                          <p class="font-medium text-amber-400">需要安装企业微信插件</p>
+                          <p class="mt-1 text-xs text-gray-400">企业微信渠道需要先安装 @wecom/wecom-openclaw-plugin 插件才能使用。</p>
+                          <div class="flex flex-wrap gap-2 mt-3">
+                            <button
+                              @click="handleInstallWecomPlugin"
+                              :disabled="wecomPluginInstalling"
+                              class="flex gap-2 items-center py-2 text-sm btn-primary"
+                            >
+                              <Loader2 v-if="wecomPluginInstalling" :size="14" class="animate-spin" />
+                              <Download v-else :size="14" />
+                              {{ wecomPluginInstalling ? '安装中...' : '一键安装插件' }}
+                            </button>
+                            <button
+                              @click="checkWecomPlugin"
+                              :disabled="wecomPluginLoading"
+                              class="flex gap-2 items-center py-2 text-sm btn-secondary"
+                            >
+                              刷新状态
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+
+                <template v-if="currentChannel.channel_type === 'qq'">
+                  <div class="mb-4">
+                    <div v-if="qqPluginLoading" class="flex gap-3 items-center p-4 rounded-xl border bg-dark-600 border-dark-500">
+                      <Loader2 :size="20" class="text-gray-400 animate-spin" />
+                      <span class="text-gray-400">正在检查QQ插件状态...</span>
+                    </div>
+                    <div v-else-if="qqPluginStatus?.installed" class="flex gap-3 items-center p-4 rounded-xl border bg-green-500/10 border-green-500/30">
+                      <Package :size="20" class="text-green-400" />
+                      <div class="flex-1">
+                        <p class="font-medium text-green-400">QQ插件已安装</p>
+                        <p class="mt-0.5 text-xs text-gray-400">
+                          {{ qqPluginStatus.plugin_name || '@sliverp/qqbot' }}
+                          {{ qqPluginStatus.version ? ` v${qqPluginStatus.version}` : '' }}
+                        </p>
+                      </div>
+                      <CheckCircle :size="16" class="text-green-400" />
+                    </div>
+                    <div v-else class="p-4 rounded-xl border bg-amber-500/10 border-amber-500/30">
+                      <div class="flex gap-3 items-start">
+                        <AlertTriangle :size="20" class="mt-0.5 text-amber-400" />
+                        <div class="flex-1">
+                          <p class="font-medium text-amber-400">需要安装QQ插件</p>
+                          <p class="mt-1 text-xs text-gray-400">QQ渠道需要先安装 @sliverp/qqbot 插件才能使用。</p>
+                          <div class="flex flex-wrap gap-2 mt-3">
+                            <button
+                              @click="handleInstallQQPlugin"
+                              :disabled="qqPluginInstalling"
+                              class="flex gap-2 items-center py-2 text-sm btn-primary"
+                            >
+                              <Loader2 v-if="qqPluginInstalling" :size="14" class="animate-spin" />
+                              <Download v-else :size="14" />
+                              {{ qqPluginInstalling ? '安装中...' : '一键安装插件' }}
+                            </button>
+                            <button
+                              @click="checkQQPlugin"
+                              :disabled="qqPluginLoading"
+                              class="flex gap-3 items-center py-2 text-sm btn-secondary"
+                            >
+                              刷新状态
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+
+
                 <div class="space-y-4">
                   <div v-for="field in currentInfo.fields" :key="field.key">
-                    <label class="block text-sm text-gray-400 mb-2">
+                    <label class="block mb-2 text-sm text-gray-400">
                       {{ field.label }}
-                      <span v-if="field.required" class="text-red-400 ml-1">*</span>
-                      <span v-if="configForm[field.key]" class="ml-2 text-green-500 text-xs">✓</span>
+                      <span v-if="field.required" class="ml-1 text-red-400">*</span>
+                      <span v-if="configForm[field.key]" class="ml-2 text-xs text-green-500">✓</span>
                     </label>
                     
                     <select
@@ -583,12 +755,12 @@ const hasValidConfig = (channel: ChannelConfig) => {
                         :type="visiblePasswords.has(field.key) ? 'text' : 'password'"
                         v-model="configForm[field.key]"
                         :placeholder="field.placeholder"
-                        class="input-base pr-10"
+                        class="pr-10 input-base"
                       />
                       <button
                         type="button"
                         @click="togglePasswordVisibility(field.key)"
-                        class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors"
+                        class="absolute right-3 top-1/2 text-gray-500 transition-colors -translate-y-1/2 hover:text-white"
                         :title="visiblePasswords.has(field.key) ? '隐藏' : '显示'"
                       >
                         <EyeOff v-if="visiblePasswords.has(field.key)" :size="18" />
@@ -604,13 +776,14 @@ const hasValidConfig = (channel: ChannelConfig) => {
                       class="input-base"
                     />
                   </div>
+                </div>
 
-                  <template v-if="currentChannel.channel_type === 'whatsapp'">
-                    <div class="p-4 bg-green-500/10 rounded-xl border border-green-500/30">
-                      <div class="flex items-center gap-3 mb-3">
+                <template v-if="currentChannel.channel_type === 'whatsapp'">
+                    <div class="p-4 rounded-xl border bg-green-500/10 border-green-500/30">
+                      <div class="flex gap-3 items-center mb-3">
                         <QrCode :size="24" class="text-green-400" />
                         <div>
-                          <p class="text-white font-medium">扫码登录</p>
+                          <p class="font-medium text-white">扫码登录</p>
                           <p class="text-xs text-gray-400">WhatsApp 需要扫描二维码登录</p>
                         </div>
                       </div>
@@ -618,7 +791,7 @@ const hasValidConfig = (channel: ChannelConfig) => {
                         <button
                           @click="handleWhatsAppLogin"
                           :disabled="loginLoading"
-                          class="flex-1 btn-secondary flex items-center justify-center gap-2"
+                          class="flex flex-1 gap-2 justify-center items-center btn-secondary"
                         >
                           <Loader2 v-if="loginLoading" :size="16" class="animate-spin" />
                           <QrCode v-else :size="16" />
@@ -627,24 +800,24 @@ const hasValidConfig = (channel: ChannelConfig) => {
                         <button
                           @click="async () => { await fetchChannels(); handleQuickTest(); }"
                           :disabled="testingChannel"
-                          class="btn-secondary flex items-center justify-center gap-2 px-4"
+                          class="flex gap-2 justify-center items-center px-4 btn-secondary"
                           title="刷新状态"
                         >
                           <Loader2 v-if="testingChannel" :size="16" class="animate-spin" />
                           <Check v-else :size="16" />
                         </button>
                       </div>
-                      <p class="text-xs text-gray-500 mt-2 text-center">
+                      <p class="mt-2 text-xs text-center text-gray-500">
                         登录成功后点击右侧按钮刷新状态，或运行: openclaw channels login --channel whatsapp
                       </p>
                     </div>
                   </template>
 
-                  <div class="pt-4 border-t border-dark-500 flex flex-wrap items-center gap-3">
+                  <div class="flex flex-wrap gap-3 items-center pt-4 border-t border-dark-500">
                     <button
                       @click="handleSave"
                       :disabled="saving"
-                      class="btn-primary flex items-center gap-2"
+                      class="flex gap-2 items-center btn-primary"
                     >
                       <Loader2 v-if="saving" :size="16" class="animate-spin" />
                       <Check v-else :size="16" />
@@ -654,7 +827,7 @@ const hasValidConfig = (channel: ChannelConfig) => {
                     <button
                       @click="handleQuickTest"
                       :disabled="testingChannel"
-                      class="btn-secondary flex items-center gap-2"
+                      class="flex gap-2 items-center btn-secondary"
                     >
                       <Loader2 v-if="testingChannel" :size="16" class="animate-spin" />
                       <Play v-else :size="16" />
@@ -665,7 +838,7 @@ const hasValidConfig = (channel: ChannelConfig) => {
                       <button
                         @click="showClearConfirm = true"
                         :disabled="clearing"
-                        class="btn-secondary flex items-center gap-2 text-red-400 hover:text-red-300 hover:border-red-500/50"
+                        class="flex gap-2 items-center text-red-400 btn-secondary hover:text-red-300 hover:border-red-500/50"
                       >
                         <Loader2 v-if="clearing" :size="16" class="animate-spin" />
                         <Trash2 v-else :size="16" />
@@ -673,17 +846,17 @@ const hasValidConfig = (channel: ChannelConfig) => {
                       </button>
                     </template>
                     <template v-else>
-                      <div class="flex items-center gap-2 px-3 py-1.5 bg-red-500/20 rounded-lg border border-red-500/50">
+                      <div class="flex gap-2 items-center px-3 py-1.5 rounded-lg border bg-red-500/20 border-red-500/50">
                         <span class="text-sm text-red-300">确定清空？</span>
                         <button
                           @click="handleClearConfig"
-                          class="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                          class="px-2 py-1 text-xs text-white bg-red-500 rounded transition-colors hover:bg-red-600"
                         >
                           确定
                         </button>
                         <button
                           @click="showClearConfirm = false"
-                          class="px-2 py-1 text-xs bg-dark-600 text-gray-300 rounded hover:bg-dark-500 transition-colors"
+                          class="px-2 py-1 text-xs text-gray-300 rounded transition-colors bg-dark-600 hover:bg-dark-500"
                         >
                           取消
                         </button>
@@ -699,25 +872,24 @@ const hasValidConfig = (channel: ChannelConfig) => {
                         testResult.success ? 'bg-green-500/10' : 'bg-red-500/10'
                       ]"
                     >
-                      <CheckCircle v-if="testResult.success" :size="20" class="text-green-400 mt-0.5" />
-                      <XCircle v-else :size="20" class="text-red-400 mt-0.5" />
+                      <CheckCircle v-if="testResult.success" :size="20" class="mt-0.5 text-green-400" />
+                      <XCircle v-else :size="20" class="mt-0.5 text-red-400" />
                       <div class="flex-1">
                         <p :class="['font-medium', testResult.success ? 'text-green-400' : 'text-red-400']">
                           {{ testResult.success ? '测试成功' : '测试失败' }}
                         </p>
-                        <p class="text-sm text-gray-400 mt-1">{{ testResult.message }}</p>
-                        <p v-if="testResult.error" class="text-xs text-red-300 mt-2 whitespace-pre-wrap">
+                        <p class="mt-1 text-sm text-gray-400">{{ testResult.message }}</p>
+                        <p v-if="testResult.error" class="mt-2 text-xs text-red-300 whitespace-pre-wrap">
                           {{ testResult.error }}
                         </p>
                       </div>
                     </div>
                   </Transition>
                 </div>
-              </div>
             </Transition>
           </template>
           <template v-else>
-            <div class="h-full flex items-center justify-center text-gray-500">
+            <div class="flex justify-center items-center h-full text-gray-500">
               <p>选择左侧渠道进行配置</p>
             </div>
           </template>

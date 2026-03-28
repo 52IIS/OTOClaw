@@ -28,7 +28,7 @@ const channelNames: Record<string, string> = {
   feishu: '飞书',
   imessage: 'iMessage',
   whatsapp: 'WhatsApp',
-  wechat: '微信',
+  wecom: '企业微信',
   dingtalk: '钉钉',
 }
 

@@ -19,7 +19,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="relative flex h-full">
+  <div class="flex relative h-full">
     <HistoryPanel />
 
     <div class="flex overflow-hidden flex-col flex-1">

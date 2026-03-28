@@ -23,6 +23,8 @@ tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
 futures-util = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.8"
+cron = "0.12"
 dirs = "5"
 shellexpand = "3"
 thiserror = "1"

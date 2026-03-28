@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import type {
   ChatMessage,
   ChatSession,
@@ -13,6 +14,26 @@ import type {
   ChatEventPayload,
 } from '../components/Chat/types'
 import { chatLogger } from '../lib/logger'
+
+interface BackendChatAttachment {
+  id: string
+  type: string
+  mime_type?: string
+  name: string
+  size?: number
+  content: string
+}
+
+function transformAttachmentForBackend(attachment: ChatAttachment): BackendChatAttachment {
+  return {
+    id: attachment.id,
+    type: attachment.type || 'file',
+    mime_type: attachment.mimeType,
+    name: attachment.name,
+    size: attachment.size,
+    content: attachment.dataUrl,
+  }
+}
 
 interface AgentsListResult {
   agents: Agent[]
@@ -63,6 +84,8 @@ export const useChatStore = defineStore('chat', () => {
     runId: null,
     startedAt: null,
   })
+  const isLoadingSessions = ref(false)
+  const isLoadingMessages = ref(false)
 
   const currentSession = computed(() =>
     sessions.value.find(s => s.key === currentSessionKey.value)
@@ -158,6 +181,18 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   const loadSessions = async () => {
+    if (!gatewayStatus.value.connected) {
+      chatLogger.info('Gateway 未连接，跳过加载会话列表')
+      sessions.value = []
+      return
+    }
+    
+    if (isLoadingSessions.value) {
+      chatLogger.info('正在加载会话列表，跳过重复调用')
+      return
+    }
+    
+    isLoadingSessions.value = true
     chatLogger.info('加载会话列表...')
     try {
       const result = await invoke<{ sessions: ChatSession[] }>('get_sessions')
@@ -165,10 +200,25 @@ export const useChatStore = defineStore('chat', () => {
     } catch (e) {
       chatLogger.error('加载会话列表失败', e)
       sessions.value = []
+    } finally {
+      isLoadingSessions.value = false
     }
   }
 
   const loadMessages = async (sessionKey: string) => {
+    if (!gatewayStatus.value.connected) {
+      chatLogger.info('Gateway 未连接，跳过加载会话消息')
+      messages.value = []
+      currentSessionKey.value = sessionKey
+      return
+    }
+    
+    if (isLoadingMessages.value) {
+      chatLogger.info('正在加载会话消息，跳过重复调用')
+      return
+    }
+    
+    isLoadingMessages.value = true
     chatLogger.info('加载会话消息...', { sessionKey })
     try {
       const result = await invoke<{ messages: ChatMessage[] }>('get_session_messages', { sessionKey })
@@ -177,6 +227,8 @@ export const useChatStore = defineStore('chat', () => {
     } catch (e) {
       chatLogger.error('加载会话消息失败', e)
       messages.value = []
+    } finally {
+      isLoadingMessages.value = false
     }
   }
 
@@ -267,27 +319,41 @@ export const useChatStore = defineStore('chat', () => {
 
   const deleteSession = async (sessionKey: string) => {
     chatLogger.action('删除会话', { sessionKey })
+
+    const wasCurrentSession = currentSessionKey.value === sessionKey
+
+    sessions.value = sessions.value.filter(s => s.key !== sessionKey)
+
+    if (wasCurrentSession) {
+      currentSessionKey.value = null
+      messages.value = []
+    }
+
     try {
       await invoke('delete_session', { sessionKey })
-      if (currentSessionKey.value === sessionKey) {
-        currentSessionKey.value = null
-        messages.value = []
-      }
+      chatLogger.info('会话删除成功', { sessionKey })
+
       await loadSessions()
-      chatLogger.info('会话删除成功，已刷新会话列表')
     } catch (e) {
       chatLogger.error('删除会话失败', e)
-      sessions.value = sessions.value.filter(s => s.key !== sessionKey)
-      if (currentSessionKey.value === sessionKey) {
+
+      await loadSessions()
+
+      if (wasCurrentSession && !sessions.value.some(s => s.key === sessionKey)) {
         currentSessionKey.value = null
         messages.value = []
       }
+
+      throw e
     }
   }
 
   const handleChatEvent = (payload: ChatEventPayload) => {
+    chatLogger.info('[DEBUG: REPEAT_ISSUE] 收到聊天事件', { state: payload.state, content: payload.message?.content, thinking: payload.thinking })
+    
     if (payload.state === 'thinking_delta') {
       streaming.value.streamThinking += payload.thinking || ''
+      chatLogger.info('[DEBUG: REPEAT_ISSUE] 思考内容追加', { streamThinking: streaming.value.streamThinking })
       return
     }
 
@@ -298,6 +364,7 @@ export const useChatStore = defineStore('chat', () => {
           text: streaming.value.streamThinking,
           isComplete: true,
         }
+        chatLogger.info('[DEBUG: REPEAT_ISSUE] 思考内容完成', { thinking: streaming.value.streamThinking })
       }
       streaming.value.streamThinking = ''
       return
@@ -305,8 +372,10 @@ export const useChatStore = defineStore('chat', () => {
 
     if (payload.state === 'delta') {
       if (payload.message?.content) {
-        streaming.value.streamText = payload.message.content
+        // 流式追加文本，仅更新流式状态，不直接修改 message.content
+        streaming.value.streamText += payload.message.content
         streaming.value.isStreaming = true
+        chatLogger.info('[DEBUG: REPEAT_ISSUE] 流式内容追加', { delta: payload.message.content, streamText: streaming.value.streamText })
       }
       return
     }
@@ -319,11 +388,13 @@ export const useChatStore = defineStore('chat', () => {
       if (payload.message) {
         const lastMessage = messages.value[messages.value.length - 1]
         if (lastMessage?.role === 'assistant') {
+          // 使用最终消息的完整内容，避免重复
           lastMessage.content = payload.message.content
           lastMessage.isStreaming = false
           if (payload.message.thinking) {
             lastMessage.thinking = payload.message.thinking
           }
+          chatLogger.info('[DEBUG: REPEAT_ISSUE] 流式完成', { finalContent: payload.message.content })
         }
       }
       isStreaming.value = false
@@ -337,12 +408,57 @@ export const useChatStore = defineStore('chat', () => {
       streaming.value.runId = null
       isStreaming.value = false
       isSending.value = false
-      
+
       const lastMessage = messages.value[messages.value.length - 1]
       if (lastMessage?.role === 'assistant') {
-        lastMessage.content = `错误: ${payload.errorMessage || '未知错误'}`
+        lastMessage.error = {
+          message: payload.errorMessage || '未知错误',
+          timestamp: Date.now(),
+        }
         lastMessage.isStreaming = false
       }
+    }
+
+    if (payload.state === 'tool_call') {
+      const lastMessage = messages.value[messages.value.length - 1]
+      if (lastMessage?.role === 'assistant' && payload.toolCall) {
+        if (!lastMessage.toolCalls) {
+          lastMessage.toolCalls = []
+        }
+        lastMessage.toolCalls.push(payload.toolCall)
+        chatLogger.info('[DEBUG: TOOL_CALL] 工具调用', { toolCall: payload.toolCall })
+      }
+      return
+    }
+
+    if (payload.state === 'tool_result') {
+      const lastMessage = messages.value[messages.value.length - 1]
+      if (lastMessage?.role === 'assistant' && payload.toolResult) {
+        if (!lastMessage.toolResults) {
+          lastMessage.toolResults = []
+        }
+        lastMessage.toolResults.push(payload.toolResult)
+        if (lastMessage.toolCalls) {
+          const toolCall = lastMessage.toolCalls.find(t => t.id === payload.toolResult?.id)
+          if (toolCall) {
+            toolCall.result = payload.toolResult.result
+          }
+        }
+        chatLogger.info('[DEBUG: TOOL_RESULT] 工具结果', { toolResult: payload.toolResult })
+      }
+      return
+    }
+
+    if (payload.state === 'artifact') {
+      const lastMessage = messages.value[messages.value.length - 1]
+      if (lastMessage?.role === 'assistant' && payload.artifact) {
+        if (!lastMessage.artifacts) {
+          lastMessage.artifacts = []
+        }
+        lastMessage.artifacts.push(payload.artifact)
+        chatLogger.info('[DEBUG: ARTIFACT] 产物', { artifact: payload.artifact })
+      }
+      return
     }
 
     if (payload.state === 'aborted') {
@@ -392,19 +508,33 @@ export const useChatStore = defineStore('chat', () => {
       startedAt: Date.now(),
     }
 
+    chatLogger.info('[DEBUG: REPEAT_ISSUE] 开始发送消息', { 
+      content: content.substring(0, 50), 
+      attachments: attachs?.length || 0,
+      messagesLength: messages.value.length,
+      assistantMessageId: assistantMessage.id
+    })
+
+    let unlisten: UnlistenFn | null = null
+    
     try {
       chatLogger.info('发送消息', { content: content.substring(0, 50), attachments: attachs?.length || 0 })
+      
+      // 监听流式事件
+      unlisten = await listen<ChatEventPayload>('chat-event', (event) => {
+        handleChatEvent(event.payload)
+      })
       
       const result = await invoke<{ content: string; thinking?: string }>('send_chat_message', {
         sessionKey: currentSessionKey.value,
         message: content,
-        attachments: attachs,
+        attachments: attachs?.map(transformAttachmentForBackend),
         agentId: selectedAgentId.value,
         modelId: selectedModelId.value,
       })
 
       const lastMessage = messages.value[messages.value.length - 1]
-      if (lastMessage.role === 'assistant') {
+      if (lastMessage.role === 'assistant' && lastMessage.isStreaming) {
         lastMessage.content = result.content
         if (result.thinking) {
           lastMessage.thinking = {
@@ -413,6 +543,7 @@ export const useChatStore = defineStore('chat', () => {
           }
         }
         lastMessage.isStreaming = false
+        chatLogger.info('[DEBUG: REPEAT_ISSUE] 消息发送完成', { finalContent: result.content.substring(0, 50) })
       }
     } catch (e) {
       chatLogger.error('发送消息失败', e)
@@ -422,6 +553,9 @@ export const useChatStore = defineStore('chat', () => {
         lastMessage.isStreaming = false
       }
     } finally {
+      if (unlisten) {
+        unlisten()
+      }
       isSending.value = false
       isStreaming.value = false
       streaming.value.isStreaming = false
@@ -488,6 +622,26 @@ export const useChatStore = defineStore('chat', () => {
     chatLogger.info('切换模型', { modelId })
   }
 
+  const patchSession = async (sessionKey: string, modelId?: string, label?: string) => {
+    chatLogger.action('修改会话', { sessionKey, modelId, label })
+    try {
+      const result = await invoke<{ session: ChatSession }>('patch_session', {
+        sessionKey,
+        modelId,
+        label,
+      })
+      const index = sessions.value.findIndex(s => s.key === sessionKey)
+      if (index !== -1) {
+        sessions.value[index] = result.session
+      }
+      chatLogger.info('会话修改成功')
+      return result.session
+    } catch (e) {
+      chatLogger.error('修改会话失败', e)
+      throw e
+    }
+  }
+
   const optimizePrompt = async () => {
     if (!inputMessage.value.trim()) return false
     
@@ -547,6 +701,8 @@ export const useChatStore = defineStore('chat', () => {
     isOptimizing,
     originalInputMessage,
     streaming,
+    isLoadingSessions,
+    isLoadingMessages,
     currentSession,
     defaultAgent,
     defaultModel,
@@ -574,6 +730,7 @@ export const useChatStore = defineStore('chat', () => {
     toggleReasoning,
     setAgent,
     setModel,
+    patchSession,
     optimizePrompt,
     revertPrompt,
     clearOptimization,

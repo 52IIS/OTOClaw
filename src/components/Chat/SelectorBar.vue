@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { ChevronDown, Bot, Cpu, Check } from 'lucide-vue-next'
+import { ChevronDown, Bot, Cpu, Check, Lock } from 'lucide-vue-next'
 import clsx from 'clsx'
 import { useChatStore } from '../../stores/chatStore'
 
@@ -8,6 +8,8 @@ const store = useChatStore()
 
 const agentDropdownOpen = ref(false)
 const modelDropdownOpen = ref(false)
+
+const isInSession = computed(() => !!store.currentSessionKey)
 
 const selectedAgent = computed(() =>
   store.agents.find(a => a.id === store.selectedAgentId)
@@ -17,12 +19,21 @@ const selectedModel = computed(() =>
   store.models.find(m => m.id === store.selectedModelId)
 )
 
+const sessionAgent = computed(() => {
+  if (!store.currentSession) return null
+  const agentId = store.currentSession.agentId
+  return store.agents.find(a => a.id === agentId)
+})
+
 const handleSelectAgent = (agentId: string) => {
   store.setAgent(agentId)
   agentDropdownOpen.value = false
 }
 
 const handleSelectModel = (modelId: string) => {
+  if (isInSession.value && store.currentSessionKey) {
+    store.patchSession(store.currentSessionKey, modelId)
+  }
   store.setModel(modelId)
   modelDropdownOpen.value = false
 }
@@ -39,14 +50,33 @@ onMounted(() => {
 
 <template>
   <div class="flex gap-3 items-center">
-    <div class="relative">
+    <div
+      class="relative"
+      :class="{ 'cursor-not-allowed': isInSession }"
+    >
       <button
-        @click="agentDropdownOpen = !agentDropdownOpen"
-        class="flex gap-2 items-center px-3 py-2 rounded-lg bg-dark-700 border border-dark-500 transition-colors hover:border-dark-400"
+        :disabled="isInSession"
+        @click="!isInSession && (agentDropdownOpen = !agentDropdownOpen)"
+        :class="clsx(
+          'flex gap-2 items-center px-3 py-2 rounded-lg border transition-all',
+          isInSession
+            ? 'bg-dark-700/50 border-dark-600 cursor-not-allowed opacity-75'
+            : 'bg-dark-700 border-dark-500 hover:border-dark-400'
+        )"
       >
-        <Bot :size="16" class="text-claw-400" />
-        <span class="text-sm text-white">{{ selectedAgent?.name || '选择智能体' }}</span>
+        <span
+          v-if="isInSession && sessionAgent"
+          class="flex justify-center items-center w-6 h-6 text-sm rounded-md bg-dark-600 shrink-0"
+        >
+          {{ sessionAgent.avatar || '🤖' }}
+        </span>
+        <Bot v-else :size="16" class="text-claw-400" />
+        <span class="text-sm text-white">
+          {{ isInSession && sessionAgent ? sessionAgent.name : (selectedAgent?.name || '选择智能体') }}
+        </span>
+        <Lock v-if="isInSession" :size="12" class="text-gray-500" title="会话中智能体不可更改" />
         <ChevronDown
+          v-else
           :size="14"
           :class="['text-gray-500 transition-transform', agentDropdownOpen && 'rotate-180']"
         />
@@ -54,7 +84,7 @@ onMounted(() => {
 
       <Transition name="dropdown">
         <div
-          v-if="agentDropdownOpen"
+          v-if="agentDropdownOpen && !isInSession"
           class="absolute top-full left-0 z-20 mt-1 w-48 overflow-hidden rounded-lg border bg-dark-700 border-dark-500 shadow-lg"
         >
           <div class="py-1 max-h-64 overflow-y-auto">

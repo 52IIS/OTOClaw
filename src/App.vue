@@ -10,6 +10,7 @@ import Skills from './components/Skills/index.vue'
 import AIConfig from './components/AIConfig/index.vue'
 import Channels from './components/Channels/index.vue'
 import Sandbox from './components/Sandbox/index.vue'
+import Cron from './components/Cron/index.vue'
 import Settings from './components/Settings/index.vue'
 import Testing from './components/Testing/index.vue'
 import Logs from './components/Logs/index.vue'
@@ -200,6 +201,7 @@ const currentComponent = computed(() => {
     ai: AIConfig,
     channels: Channels,
     sandbox: Sandbox,
+    cron: Cron,
     testing: Testing,
     logs: Logs,
     settings: Settings,

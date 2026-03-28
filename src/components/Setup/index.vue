@@ -11,6 +11,7 @@ import {
   Cpu,
   Package
 } from 'lucide-vue-next'
+import { isTauri } from '../../lib/tauri'
 import type { EnvironmentStatus, InstallResult } from '../../vite-env'
 
 interface Props {
@@ -30,6 +31,7 @@ const checking = ref(true)
 const installing = ref<'nodejs' | 'openclaw' | null>(null)
 const error = ref<string | null>(null)
 const step = ref<'check' | 'install' | 'complete'>('check')
+const appVersion = ref<string>('')
 
 const checkEnvironment = async () => {
   checking.value = true
@@ -51,8 +53,18 @@ const checkEnvironment = async () => {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   checkEnvironment()
+  if (isTauri()) {
+    try {
+      const version = await invoke<{ version: string }>('get_app_version')
+      appVersion.value = version.version
+    } catch {
+      appVersion.value = '1.0.0'
+    }
+  } else {
+    appVersion.value = '1.0.0'
+  }
 })
 
 const handleInstallNodejs = async () => {
@@ -395,7 +407,7 @@ const openclawStatusClass = computed(() => {
       </div>
 
       <p class="mt-6 text-xs text-center text-dark-500">
-        OTOClaw v1.0.0
+        OTOClaw v{{ appVersion || '1.0.0' }}
       </p>
     </div>
   </div>

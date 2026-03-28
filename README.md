@@ -75,7 +75,8 @@
 
 - **Telegram** - Bot Token 配置、私聊/群组策略
 - **飞书** - App ID/Secret、WebSocket 连接、多部署区域
-- **更多渠道** - Discord、Slack、WhatsApp、iMessage、微信、钉钉
+- **企业微信** - 多账号管理、Bot ID/Secret、Agent API 配置
+- **更多渠道** - Discord、Slack、WhatsApp、iMessage、钉钉
 
 ***
 
@@ -89,7 +90,7 @@
 | 📥 **内置聊天界面** | 无需第三方工具即可直接对话测试 |
 | 🧩 **技能系统** | 技能安装、配置、导出、依赖管理 |
 | 🐳 **沙箱管理** | Docker 容器配置、安全策略可视化 |
-| 📱 **消息渠道**  | Telegram、Discord、Slack、飞书、微信、iMessage、钉钉 |
+| 📱 **消息渠道**  | Telegram、Discord、Slack、飞书、企业微信、iMessage、钉钉 |
 | ⚡ **服务管理**   | 后台服务控制、实时日志、开机自启                         |
 | 🧪 **测试诊断**  | 系统环境检查、AI 连接测试、渠道连通性测试                   |
 | 🔄 **应用更新** | 内置更新检查与一键升级 |

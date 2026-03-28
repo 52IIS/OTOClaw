@@ -1,3 +1,4 @@
+use crate::commands::common::{load_openclaw_config, save_openclaw_config};
 use crate::models::{
     AIConfigOverview, ChannelConfig, ConfiguredModel, ConfiguredProvider,
     ModelConfig, ModelCostConfig, OfficialProvider, OpenClawConfig,
@@ -9,30 +10,6 @@ use serde_json::{json, Value};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tauri::command;
-
-/// 获取 openclaw.json 配置
-fn load_openclaw_config() -> Result<Value, String> {
-    let config_path = platform::get_config_file_path();
-    
-    if !file::file_exists(&config_path) {
-        return Ok(json!({}));
-    }
-    
-    let content =
-        file::read_file(&config_path).map_err(|e| format!("读取配置文件失败: {}", e))?;
-    
-    serde_json::from_str(&content).map_err(|e| format!("解析配置文件失败: {}", e))
-}
-
-/// 保存 openclaw.json 配置
-fn save_openclaw_config(config: &Value) -> Result<(), String> {
-    let config_path = platform::get_config_file_path();
-    
-    let content =
-        serde_json::to_string_pretty(config).map_err(|e| format!("序列化配置失败: {}", e))?;
-    
-    file::write_file(&config_path, &content).map_err(|e| format!("写入配置文件失败: {}", e))
-}
 
 /// 获取完整配置
 #[command]
@@ -853,7 +830,8 @@ pub async fn get_channels_config() -> Result<Vec<ChannelConfig>, String> {
         ("feishu", "feishu", vec!["testChatId"]),
         ("whatsapp", "whatsapp", vec![]),
         ("imessage", "imessage", vec![]),
-        ("wechat", "wechat", vec![]),
+        ("wecom", "wecom", vec!["userId"]),
+        ("qq", "qq", vec!["userId"]),
         ("dingtalk", "dingtalk", vec![]),
     ];
     
@@ -1050,7 +1028,7 @@ pub async fn clear_channel_config(channel_id: String) -> Result<String, String> 
 
 // ============ 飞书插件管理 ============
 
-/// 飞书插件状态
+/// 插件状态
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FeishuPluginStatus {
     pub installed: bool,
@@ -1058,24 +1036,33 @@ pub struct FeishuPluginStatus {
     pub plugin_name: Option<String>,
 }
 
-/// 检查飞书插件是否已安装
+/// 检查插件是否已安装
 #[command]
-pub async fn check_feishu_plugin() -> Result<FeishuPluginStatus, String> {
-    info!("[飞书插件] 检查飞书插件安装状态...");
+pub async fn check_feishu_plugin(plugin_name: Option<String>) -> Result<FeishuPluginStatus, String> {
+    let plugin_name = plugin_name.unwrap_or("@m1heng-clawd/feishu".to_string());
+    let plugin_keyword = if plugin_name.contains("wecom") {
+        "wecom"
+    } else if plugin_name.contains("qqbot") {
+        "qqbot"
+    } else {
+        "feishu"
+    };
+    
+    info!("[插件检查] 检查 {} 插件安装状态...", plugin_keyword);
     
     // 执行 openclaw plugins list 命令
     match shell::run_openclaw(&["plugins", "list"]) {
         Ok(output) => {
-            debug!("[飞书插件] plugins list 输出: {}", output);
+            debug!("[插件检查] plugins list 输出: {}", output);
             
-            // 查找包含 feishu 的行（不区分大小写）
+            // 查找包含关键字的行（不区分大小写）
             let lines: Vec<&str> = output.lines().collect();
-            let feishu_line = lines.iter().find(|line| {
-                line.to_lowercase().contains("feishu")
+            let plugin_line = lines.iter().find(|line| {
+                line.to_lowercase().contains(plugin_keyword)
             });
             
-            if let Some(line) = feishu_line {
-                info!("[飞书插件] ✓ 飞书插件已安装: {}", line);
+            if let Some(line) = plugin_line {
+                info!("[插件检查] ✓ {} 插件已安装: {}", plugin_keyword, line);
                 
                 // 尝试解析版本号（通常格式为 "name@version" 或 "name version"）
                 let version = if line.contains('@') {
@@ -1094,7 +1081,7 @@ pub async fn check_feishu_plugin() -> Result<FeishuPluginStatus, String> {
                     plugin_name: Some(line.trim().to_string()),
                 })
             } else {
-                info!("[飞书插件] ✗ 飞书插件未安装");
+                info!("[插件检查] ✗ {} 插件未安装", plugin_keyword);
                 Ok(FeishuPluginStatus {
                     installed: false,
                     version: None,
@@ -1103,7 +1090,7 @@ pub async fn check_feishu_plugin() -> Result<FeishuPluginStatus, String> {
             }
         }
         Err(e) => {
-            warn!("[飞书插件] 检查插件列表失败: {}", e);
+            warn!("[插件检查] 检查插件列表失败: {}", e);
             // 如果命令失败，假设插件未安装
             Ok(FeishuPluginStatus {
                 installed: false,
@@ -1114,38 +1101,46 @@ pub async fn check_feishu_plugin() -> Result<FeishuPluginStatus, String> {
     }
 }
 
-/// 安装飞书插件
+/// 安装插件
 #[command]
-pub async fn install_feishu_plugin() -> Result<String, String> {
-    info!("[飞书插件] 开始安装飞书插件...");
+pub async fn install_feishu_plugin(plugin_name: Option<String>) -> Result<String, String> {
+    let plugin_name = plugin_name.unwrap_or("@m1heng-clawd/feishu".to_string());
+    let plugin_keyword = if plugin_name.contains("wecom") {
+        "企业微信"
+    } else if plugin_name.contains("qqbot") {
+        "QQ"
+    } else {
+        "飞书"
+    };
+    
+    info!("[插件安装] 开始安装 {} 插件...", plugin_keyword);
     
     // 先检查是否已安装
-    let status = check_feishu_plugin().await?;
+    let status = check_feishu_plugin(Some(plugin_name.clone())).await?;
     if status.installed {
-        info!("[飞书插件] 飞书插件已安装，跳过");
-        return Ok(format!("飞书插件已安装: {}", status.plugin_name.unwrap_or_default()));
+        info!("[插件安装] {} 插件已安装，跳过", plugin_keyword);
+        return Ok(format!("{} 插件已安装: {}", plugin_keyword, status.plugin_name.unwrap_or_default()));
     }
     
-    // 安装飞书插件
-    // 注意：使用 @m1heng-clawd/feishu 包名
-    info!("[飞书插件] 执行 openclaw plugins install @m1heng-clawd/feishu ...");
-    match shell::run_openclaw(&["plugins", "install", "@m1heng-clawd/feishu"]) {
+    // 安装插件
+    info!("[插件安装] 执行 openclaw plugins install {} ...", plugin_name);
+    match shell::run_openclaw(&["plugins", "install", &plugin_name]) {
         Ok(output) => {
-            info!("[飞书插件] 安装输出: {}", output);
+            info!("[插件安装] 安装输出: {}", output);
             
             // 验证安装结果
-            let verify_status = check_feishu_plugin().await?;
+            let verify_status = check_feishu_plugin(Some(plugin_name)).await?;
             if verify_status.installed {
-                info!("[飞书插件] ✓ 飞书插件安装成功");
-                Ok(format!("飞书插件安装成功: {}", verify_status.plugin_name.unwrap_or_default()))
+                info!("[插件安装] ✓ {} 插件安装成功", plugin_keyword);
+                Ok(format!("{} 插件安装成功: {}", plugin_keyword, verify_status.plugin_name.unwrap_or_default()))
             } else {
-                warn!("[飞书插件] 安装命令执行成功但插件未找到");
-                Err("安装命令执行成功但插件未找到，请检查 openclaw 版本".to_string())
+                warn!("[插件安装] 安装命令执行成功但插件未找到");
+                Err(format!("安装命令执行成功但插件未找到，请检查 openclaw 版本"))
             }
         }
         Err(e) => {
-            error!("[飞书插件] ✗ 安装失败: {}", e);
-            Err(format!("安装飞书插件失败: {}\n\n请手动执行: openclaw plugins install @m1heng-clawd/feishu", e))
+            error!("[插件安装] ✗ 安装失败: {}", e);
+            Err(format!("安装 {} 插件失败: {}\n\n请手动执行: openclaw plugins install {}", plugin_keyword, e, plugin_name))
         }
     }
 }
@@ -1426,6 +1421,9 @@ pub async fn save_gateway_config(
     if config["gateway"].get("auth").is_none() {
         config["gateway"]["auth"] = json!({});
     }
+    if config["gateway"].get("remote").is_none() {
+        config["gateway"]["remote"] = json!({});
+    }
     
     // 解析 URL 获取端口号（URL 仅用于前端显示，后端使用 port 字段）
     if let Some(u) = url {
@@ -1438,10 +1436,13 @@ pub async fn save_gateway_config(
         }
     }
     
-    // 更新 Token
+    // 更新 Token - 同时设置 auth.token 和 remote.token
     if let Some(t) = token {
         if !t.is_empty() {
             config["gateway"]["auth"]["token"] = json!(t);
+            // 设置 remote.token 以匹配 auth.token（解决 token mismatch 问题）
+            config["gateway"]["remote"]["token"] = json!(t);
+            info!("[Gateway配置] 设置 Token (auth + remote)");
         }
     }
     
@@ -1473,4 +1474,408 @@ pub async fn init_gateway_token() -> Result<String, String> {
     
     // 返回掩码版本
     Ok(mask_sensitive_string(&token))
+}
+
+// ============ 企业微信多账号管理 ============
+
+/// 企业微信账号信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WecomAccount {
+    #[serde(rename = "accountId")]
+    pub account_id: String,
+    pub name: String,
+    pub enabled: bool,
+    pub configured: bool,
+    #[serde(rename = "botId")]
+    pub bot_id: String,
+    #[serde(rename = "websocketUrl")]
+    pub websocket_url: String,
+    #[serde(rename = "agentConfigured")]
+    pub agent_configured: bool,
+    #[serde(rename = "callbackConfigured")]
+    pub callback_configured: bool,
+}
+
+/// 企业微信账号配置数据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WecomAccountConfig {
+    #[serde(rename = "accountId")]
+    pub account_id: String,
+    pub name: String,
+    #[serde(rename = "botId")]
+    pub bot_id: String,
+    pub secret: String,
+    #[serde(rename = "websocketUrl")]
+    pub websocket_url: String,
+    pub enabled: bool,
+    pub agent: WecomAgentConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WecomAgentConfig {
+    #[serde(rename = "corpId")]
+    pub corp_id: String,
+    #[serde(rename = "corpSecret")]
+    pub corp_secret: String,
+    #[serde(rename = "agentId")]
+    pub agent_id: String,
+    pub callback: WecomCallbackConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WecomCallbackConfig {
+    pub token: String,
+    #[serde(rename = "encodingAESKey")]
+    pub encoding_aes_key: String,
+    pub path: String,
+}
+
+/// 获取企业微信账号列表
+#[command]
+pub async fn get_wecom_accounts() -> Result<Vec<WecomAccount>, String> {
+    info!("[企业微信] 获取账号列表...");
+    
+    let config = load_openclaw_config()?;
+    let mut accounts = Vec::new();
+    
+    // 获取 wecom 渠道配置
+    if let Some(wecom_config) = config.pointer("/channels/wecom").and_then(|v| v.as_object()) {
+        // 检查是否有多账号配置
+        for (key, value) in wecom_config {
+            // 跳过保留字段
+            if ["enabled", "name", "botId", "secret", "websocketUrl", "agent", "callback"].contains(&key.as_str()) {
+                continue;
+            }
+            
+            // 检查是否是账号配置对象
+            if let Some(account_obj) = value.as_object() {
+                let bot_id = account_obj.get("botId")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let secret = account_obj.get("secret")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let websocket_url = account_obj.get("websocketUrl")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("wss://openws.work.weixin.qq.com")
+                    .to_string();
+                let enabled = account_obj.get("enabled")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true);
+                let name = account_obj.get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(key)
+                    .to_string();
+                
+                // 检查 Agent 配置
+                let agent_configured = if let Some(agent) = account_obj.get("agent").and_then(|v| v.as_object()) {
+                    let corp_id = agent.get("corpId").and_then(|v| v.as_str()).unwrap_or("");
+                    let corp_secret = agent.get("corpSecret").and_then(|v| v.as_str()).unwrap_or("");
+                    let agent_id = agent.get("agentId").and_then(|v| v.as_str()).unwrap_or("");
+                    !corp_id.is_empty() && !corp_secret.is_empty() && !agent_id.is_empty()
+                } else {
+                    false
+                };
+                
+                // 检查回调配置
+                let callback_configured = if let Some(agent) = account_obj.get("agent").and_then(|v| v.as_object()) {
+                    if let Some(callback) = agent.get("callback").and_then(|v| v.as_object()) {
+                        let token = callback.get("token").and_then(|v| v.as_str()).unwrap_or("");
+                        let aes_key = callback.get("encodingAESKey").and_then(|v| v.as_str()).unwrap_or("");
+                        !token.is_empty() && !aes_key.is_empty()
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
+                
+                accounts.push(WecomAccount {
+                    account_id: key.clone(),
+                    name,
+                    enabled,
+                    configured: !bot_id.is_empty() && !secret.is_empty(),
+                    bot_id,
+                    websocket_url,
+                    agent_configured,
+                    callback_configured,
+                });
+            }
+        }
+        
+        // 如果没有多账号配置，检查默认配置
+        if accounts.is_empty() {
+            let bot_id = wecom_config.get("botId")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let secret = wecom_config.get("secret")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let websocket_url = wecom_config.get("websocketUrl")
+                .and_then(|v| v.as_str())
+                .unwrap_or("wss://openws.work.weixin.qq.com")
+                .to_string();
+            let enabled = wecom_config.get("enabled")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let name = wecom_config.get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("默认账号")
+                .to_string();
+            
+            // 检查 Agent 配置
+            let agent_configured = if let Some(agent) = wecom_config.get("agent").and_then(|v| v.as_object()) {
+                let corp_id = agent.get("corpId").and_then(|v| v.as_str()).unwrap_or("");
+                let corp_secret = agent.get("corpSecret").and_then(|v| v.as_str()).unwrap_or("");
+                let agent_id = agent.get("agentId").and_then(|v| v.as_str()).unwrap_or("");
+                !corp_id.is_empty() && !corp_secret.is_empty() && !agent_id.is_empty()
+            } else {
+                false
+            };
+            
+            // 检查回调配置
+            let callback_configured = if let Some(agent) = wecom_config.get("agent").and_then(|v| v.as_object()) {
+                if let Some(callback) = agent.get("callback").and_then(|v| v.as_object()) {
+                    let token = callback.get("token").and_then(|v| v.as_str()).unwrap_or("");
+                    let aes_key = callback.get("encodingAESKey").and_then(|v| v.as_str()).unwrap_or("");
+                    !token.is_empty() && !aes_key.is_empty()
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+            
+            accounts.push(WecomAccount {
+                account_id: "default".to_string(),
+                name,
+                enabled,
+                configured: !bot_id.is_empty() && !secret.is_empty(),
+                bot_id,
+                websocket_url,
+                agent_configured,
+                callback_configured,
+            });
+        }
+    }
+    
+    info!("[企业微信] ✓ 返回 {} 个账号", accounts.len());
+    Ok(accounts)
+}
+
+/// 获取企业微信账号详情
+#[command]
+pub async fn get_wecom_account(account_id: String) -> Result<WecomAccountConfig, String> {
+    info!("[企业微信] 获取账号详情: {}", account_id);
+    
+    let config = load_openclaw_config()?;
+    
+    let wecom_config = config.pointer("/channels/wecom")
+        .and_then(|v| v.as_object())
+        .ok_or("企业微信渠道未配置")?;
+    
+    // 尝试从多账号配置中获取
+    let account_obj = if account_id == "default" {
+        wecom_config
+    } else {
+        wecom_config.get(&account_id)
+            .and_then(|v| v.as_object())
+            .unwrap_or(wecom_config)
+    };
+    
+    let bot_id = account_obj.get("botId")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let secret = account_obj.get("secret")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let websocket_url = account_obj.get("websocketUrl")
+        .and_then(|v| v.as_str())
+        .unwrap_or("wss://openws.work.weixin.qq.com")
+        .to_string();
+    let enabled = account_obj.get("enabled")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+    let name = account_obj.get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or(&account_id)
+        .to_string();
+    
+    // 解析 Agent 配置
+    let agent = if let Some(agent_obj) = account_obj.get("agent").and_then(|v| v.as_object()) {
+        let callback = if let Some(callback_obj) = agent_obj.get("callback").and_then(|v| v.as_object()) {
+            WecomCallbackConfig {
+                token: callback_obj.get("token").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                encoding_aes_key: callback_obj.get("encodingAESKey").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                path: callback_obj.get("path").and_then(|v| v.as_str()).unwrap_or("/api/channels/wecom/callback").to_string(),
+            }
+        } else {
+            WecomCallbackConfig {
+                token: String::new(),
+                encoding_aes_key: String::new(),
+                path: "/api/channels/wecom/callback".to_string(),
+            }
+        };
+        
+        WecomAgentConfig {
+            corp_id: agent_obj.get("corpId").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            corp_secret: agent_obj.get("corpSecret").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            agent_id: agent_obj.get("agentId").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            callback,
+        }
+    } else {
+        WecomAgentConfig {
+            corp_id: String::new(),
+            corp_secret: String::new(),
+            agent_id: String::new(),
+            callback: WecomCallbackConfig {
+                token: String::new(),
+                encoding_aes_key: String::new(),
+                path: "/api/channels/wecom/callback".to_string(),
+            },
+        }
+    };
+    
+    Ok(WecomAccountConfig {
+        account_id: account_id.clone(),
+        name,
+        bot_id,
+        secret,
+        websocket_url,
+        enabled,
+        agent,
+    })
+}
+
+/// 创建企业微信账号
+#[command]
+pub async fn create_wecom_account(config: WecomAccountConfig) -> Result<String, String> {
+    info!("[企业微信] 创建账号: {}", config.account_id);
+    
+    let mut openclaw_config = load_openclaw_config()?;
+    
+    // 确保 channels.wecom 存在
+    if openclaw_config.get("channels").is_none() {
+        openclaw_config["channels"] = json!({});
+    }
+    if openclaw_config["channels"].get("wecom").is_none() {
+        openclaw_config["channels"]["wecom"] = json!({});
+    }
+    
+    // 构建账号配置
+    let account_obj = json!({
+        "name": config.name,
+        "botId": config.bot_id,
+        "secret": config.secret,
+        "websocketUrl": config.websocket_url,
+        "enabled": config.enabled,
+        "agent": {
+            "corpId": config.agent.corp_id,
+            "corpSecret": config.agent.corp_secret,
+            "agentId": config.agent.agent_id,
+            "callback": {
+                "token": config.agent.callback.token,
+                "encodingAESKey": config.agent.callback.encoding_aes_key,
+                "path": config.agent.callback.path,
+            }
+        }
+    });
+    
+    // 保存账号配置
+    openclaw_config["channels"]["wecom"][&config.account_id] = account_obj;
+    
+    // 确保 plugins 配置正确
+    if openclaw_config.get("plugins").is_none() {
+        openclaw_config["plugins"] = json!({
+            "allow": [],
+            "entries": {}
+        });
+    }
+    if openclaw_config["plugins"].get("allow").is_none() {
+        openclaw_config["plugins"]["allow"] = json!([]);
+    }
+    if openclaw_config["plugins"].get("entries").is_none() {
+        openclaw_config["plugins"]["entries"] = json!({});
+    }
+    
+    // 确保 wecom 在白名单中
+    if let Some(allow_arr) = openclaw_config["plugins"]["allow"].as_array_mut() {
+        if !allow_arr.contains(&json!("wecom")) {
+            allow_arr.push(json!("wecom"));
+        }
+    }
+    
+    // 确保 wecom 插件已启用
+    openclaw_config["plugins"]["entries"]["wecom"] = json!({
+        "enabled": true
+    });
+    
+    save_openclaw_config(&openclaw_config)?;
+    
+    info!("[企业微信] ✓ 账号 {} 创建成功", config.account_id);
+    Ok(format!("账号 {} 创建成功", config.account_id))
+}
+
+/// 更新企业微信账号
+#[command]
+pub async fn update_wecom_account(account_id: String, config: WecomAccountConfig) -> Result<String, String> {
+    info!("[企业微信] 更新账号: {}", account_id);
+    
+    let mut openclaw_config = load_openclaw_config()?;
+    
+    // 检查账号是否存在
+    if openclaw_config.pointer(&format!("/channels/wecom/{}", account_id)).is_none() {
+        return Err(format!("账号 {} 不存在", account_id));
+    }
+    
+    // 构建账号配置
+    let account_obj = json!({
+        "name": config.name,
+        "botId": config.bot_id,
+        "secret": config.secret,
+        "websocketUrl": config.websocket_url,
+        "enabled": config.enabled,
+        "agent": {
+            "corpId": config.agent.corp_id,
+            "corpSecret": config.agent.corp_secret,
+            "agentId": config.agent.agent_id,
+            "callback": {
+                "token": config.agent.callback.token,
+                "encodingAESKey": config.agent.callback.encoding_aes_key,
+                "path": config.agent.callback.path,
+            }
+        }
+    });
+    
+    // 更新账号配置
+    openclaw_config["channels"]["wecom"][&account_id] = account_obj;
+    
+    save_openclaw_config(&openclaw_config)?;
+    
+    info!("[企业微信] ✓ 账号 {} 更新成功", account_id);
+    Ok(format!("账号 {} 更新成功", account_id))
+}
+
+/// 删除企业微信账号
+#[command]
+pub async fn delete_wecom_account(account_id: String) -> Result<String, String> {
+    info!("[企业微信] 删除账号: {}", account_id);
+    
+    let mut openclaw_config = load_openclaw_config()?;
+    
+    // 从配置中删除账号
+    if let Some(wecom) = openclaw_config.get_mut("channels").and_then(|c| c.get_mut("wecom")).and_then(|w| w.as_object_mut()) {
+        wecom.remove(&account_id);
+    }
+    
+    save_openclaw_config(&openclaw_config)?;
+    
+    info!("[企业微信] ✓ 账号 {} 已删除", account_id);
+    Ok(format!("账号 {} 已删除", account_id))
 }

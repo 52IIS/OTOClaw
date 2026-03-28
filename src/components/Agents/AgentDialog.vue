@@ -19,7 +19,11 @@ const emit = defineEmits<{
 const { alert } = useDialog()
 
 const isEditing = computed(() => props.editingAgent !== null)
-const dialogTitle = computed(() => isEditing.value ? '编辑智能体' : '创建新智能体')
+const isBuiltinAgent = computed(() => props.editingAgent?.isBuiltin ?? false)
+const dialogTitle = computed(() => {
+  if (isBuiltinAgent.value) return '编辑内置智能体'
+  return isEditing.value ? '编辑智能体' : '创建新智能体'
+})
 
 const activeTab = ref<'basic' | 'workspace'>('basic')
 const createdAgentId = ref<string | null>(null)
@@ -176,7 +180,7 @@ const handleSubmit = async () => {
         description: form.value.description.trim() || undefined,
         avatar: form.value.avatar || undefined,
         model: form.value.model || undefined,
-        workspace: form.value.workspace.trim() || undefined,
+        workspace: isBuiltinAgent.value ? undefined : (form.value.workspace.trim() || undefined),
         skills: skillsArray.length > 0 ? skillsArray : undefined,
       }
       await api.updateAgent(params)
@@ -227,13 +231,13 @@ const getSkillTagsDisplay = (skill: SkillInfo) => {
 </script>
 
 <template>
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+  <div class="flex fixed inset-0 z-50 justify-center items-center p-4 backdrop-blur-sm bg-black/60">
     <div
       class="w-full max-w-4xl max-h-[90vh] bg-dark-800 rounded-2xl border border-dark-500 shadow-2xl flex flex-col"
       @click.stop
     >
-      <div class="flex items-center justify-between p-4 border-b border-dark-600 shrink-0">
-        <div class="flex items-center gap-2">
+      <div class="flex justify-between items-center p-4 border-b border-dark-600 shrink-0">
+        <div class="flex gap-2 items-center">
           <Bot :size="20" class="text-claw-400" />
           <h3 class="text-lg font-semibold text-white">{{ dialogTitle }}</h3>
         </div>
@@ -275,7 +279,7 @@ const getSkillTagsDisplay = (skill: SkillInfo) => {
         </button>
       </div>
 
-      <div class="flex-1 overflow-y-auto">
+      <div class="overflow-y-auto flex-1">
         <form v-show="activeTab === 'basic'" @submit.prevent="handleSubmit" class="p-4 space-y-5">
           <div>
             <label class="block mb-1 text-sm font-medium text-gray-300">
@@ -357,18 +361,21 @@ const getSkillTagsDisplay = (skill: SkillInfo) => {
             <label class="block mb-1 text-sm font-medium text-gray-300">
               <FolderOpen :size="14" class="inline mr-1" />
               工作区目录
+              <span v-if="isBuiltinAgent" class="ml-2 text-xs text-claw-400">(内置智能体不可修改)</span>
             </label>
             <input
               v-model="form.workspace"
               type="text"
-              placeholder="留空则自动生成在 ~/.openclaw/workspace-{智能体ID}"
+              :disabled="isBuiltinAgent"
+              :placeholder="isBuiltinAgent ? '内置智能体使用固定工作区目录' : '留空则自动生成在 ~/.openclaw/workspace-{智能体ID}'"
               :class="clsx(
                 'w-full px-3 py-2 bg-dark-700 border rounded-lg text-white placeholder-gray-500',
                 'focus:outline-none focus:ring-2 focus:ring-claw-500/50 focus:border-claw-500',
-                'border-dark-500'
+                'border-dark-500',
+                isBuiltinAgent && 'opacity-60 cursor-not-allowed'
               )"
             />
-            <div class="mt-2 p-3 rounded-lg bg-dark-700/50 border border-dark-600">
+            <div v-if="!isBuiltinAgent" class="p-3 mt-2 rounded-lg border bg-dark-700/50 border-dark-600">
               <div class="flex gap-1 items-center mb-2 text-xs text-gray-400">
                 <Info :size="12" />
                 目录填写示例
@@ -379,8 +386,8 @@ const getSkillTagsDisplay = (skill: SkillInfo) => {
                   :key="example.label"
                   class="flex gap-2 items-center text-xs"
                 >
-                  <span class="text-gray-500 w-28 shrink-0">{{ example.label }}:</span>
-                  <code class="px-1.5 py-0.5 bg-dark-600 rounded text-claw-300 font-mono">{{ example.value }}</code>
+                  <span class="w-28 text-gray-500 shrink-0">{{ example.label }}:</span>
+                  <code class="px-1.5 py-0.5 font-mono rounded bg-dark-600 text-claw-300">{{ example.value }}</code>
                 </div>
               </div>
               <p class="mt-2 text-xs text-gray-500">
@@ -390,7 +397,7 @@ const getSkillTagsDisplay = (skill: SkillInfo) => {
           </div>
 
           <div>
-            <div class="flex items-center justify-between mb-2">
+            <div class="flex justify-between items-center mb-2">
               <label class="text-sm font-medium text-gray-300">
                 <Sparkles :size="14" class="inline mr-1" />
                 技能选择
@@ -412,10 +419,10 @@ const getSkillTagsDisplay = (skill: SkillInfo) => {
             <div v-else-if="availableSkills.length === 0" class="py-8 text-center text-gray-500">
               <AlertCircle :size="24" class="mx-auto mb-2 opacity-50" />
               <p>暂无可用技能</p>
-              <p class="text-xs mt-1">请确保 OpenClaw 已正确安装并配置</p>
+              <p class="mt-1 text-xs">请确保 OpenClaw 已正确安装并配置</p>
             </div>
 
-            <div v-else class="grid grid-cols-2 gap-3 max-h-64 overflow-y-auto pr-1">
+            <div v-else class="grid overflow-y-auto grid-cols-2 gap-3 pr-1 max-h-64">
               <div
                 v-for="skill in availableSkills"
                 :key="skill.id"
@@ -433,7 +440,7 @@ const getSkillTagsDisplay = (skill: SkillInfo) => {
                   </div>
                   <div class="flex-1 min-w-0">
                     <div class="flex gap-2 items-center">
-                      <h4 class="font-medium text-white text-sm truncate">{{ skill.name }}</h4>
+                      <h4 class="text-sm font-medium text-white truncate">{{ skill.name }}</h4>
                       <Check v-if="isSkillSelected(skill.id)" :size="14" class="text-claw-400 shrink-0" />
                     </div>
                     <p class="mt-0.5 text-xs text-gray-500 line-clamp-2">
@@ -458,7 +465,7 @@ const getSkillTagsDisplay = (skill: SkillInfo) => {
               </div>
             </div>
 
-            <div class="flex gap-4 justify-between items-center mt-3 p-2 rounded-lg bg-dark-700/50">
+            <div class="flex gap-4 justify-between items-center p-2 mt-3 rounded-lg bg-dark-700/50">
               <div class="text-xs text-gray-500">
                 <span v-if="selectAllSkills">已选择：全部技能（无限制）</span>
                 <span v-else>已选择：{{ form.selectedSkills.length }} / {{ availableSkills.length }} 个技能</span>

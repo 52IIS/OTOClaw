@@ -244,7 +244,7 @@ const getSourceColor = (source: string) => {
         <a
           href="https://clawhub.ai/"
           target="_blank"
-          class="flex gap-2 items-center px-4 py-3 text-sm text-gray-300 rounded-xl border transition-colors bg-dark-600 border-dark-500 hover:bg-dark-500"
+          class="flex gap-2 items-center px-4 py-3 text-sm rounded-xl border transition-colors text-claw-400 bg-claw-500/10 border-claw-500/30 hover:bg-claw-500/20"
         >
           <ExternalLink :size="16" />
           ClawHub 官方社区
@@ -252,7 +252,7 @@ const getSourceColor = (source: string) => {
         <a
           href="https://skillhub.tencent.com/"
           target="_blank"
-          class="flex gap-2 items-center px-4 py-3 text-sm rounded-xl border transition-colors text-claw-400 bg-claw-500/10 border-claw-500/30 hover:bg-claw-500/20"
+          class="flex gap-2 items-center px-4 py-3 text-sm text-gray-300 rounded-xl border transition-colors bg-dark-600 border-dark-500 hover:bg-dark-500"
         >
           <ExternalLink :size="16" />
           SkillHub 技能商店
