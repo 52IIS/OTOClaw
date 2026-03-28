@@ -845,7 +845,7 @@ pub async fn install_skill_dependency(skill_id: String, install_id: String) -> R
                 if output.status.success() {
                     return Ok(SkillInstallResult {
                         success: true,
-                        message: format!("Installed {} via Homebrew", formula),
+                        message: format!("Installed {} via Homebrew or Nvm", formula),
                         install_id: Some(install_id),
                     });
                 } else {
@@ -854,7 +854,7 @@ pub async fn install_skill_dependency(skill_id: String, install_id: String) -> R
             }
             #[cfg(not(target_os = "macos"))]
             {
-                return Err("Homebrew only supported on macOS".to_string());
+                return Err("Homebrew or Nvm only supported on macOS".to_string());
             }
         }
         "node" => {

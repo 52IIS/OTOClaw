@@ -297,7 +297,8 @@ pub async fn install_nodejs() -> Result<InstallResult, String> {
             install_nodejs_windows().await
         },
         "macos" => {
-            info!("[安装Node.js] 使用 macOS 安装方式 (Homebrew)...");
+            // info!("[安装Node.js] 使用 macOS 安装方式 (Homebrew)...");
+            info!("[安装Node.js] 使用 macOS 安装方式 (Nvm)...");
             install_nodejs_macos().await
         },
         "linux" => {
@@ -398,36 +399,61 @@ if ($nodeVersion) {
 }
 
 /// macOS 安装 Node.js
+/// 使用 nvm (Node Version Manager) 安装，无需 sudo 权限
+/// nvm 会将 Node.js 安装在用户目录下，避免管理员权限问题
+/// Homebrew 方式因需要 sudo 在 GUI 环境下不可靠
 async fn install_nodejs_macos() -> Result<InstallResult, String> {
-    // 使用 Homebrew 安装
     let script = r#"
-# 检查 Homebrew
-if ! command -v brew &> /dev/null; then
-    echo "安装 Homebrew..."
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+set -e
+
+# nvm 安装脚本（无需 sudo，安装到用户目录）
+export NVM_DIR="$HOME/.nvm"
+
+# 检查 nvm 是否已安装
+if [ ! -d "$NVM_DIR" ]; then
+    echo "安装 nvm (Node Version Manager)..."
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
     
-    # 配置 PATH
-    if [[ -f /opt/homebrew/bin/brew ]]; then
-        eval "$(/opt/homebrew/bin/brew shellenv)"
-    elif [[ -f /usr/local/bin/brew ]]; then
-        eval "$(/usr/local/bin/brew shellenv)"
-    fi
+    # 加载 nvm
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+else
+    # 加载已存在的 nvm
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 fi
 
-echo "安装 Node.js 22..."
-brew install node@22
-brew link --overwrite node@22
+# 验证 nvm 是否可用
+nvm --version
+
+# 安装 Node.js 22 LTS
+echo "使用 nvm 安装 Node.js 22..."
+nvm install 22
+nvm use 22
+nvm alias default 22
 
 # 验证安装
 node --version
+npm --version
+
+echo "Node.js 安装目录: $(which node)"
 "#;
     
     match shell::run_bash_output(script) {
-        Ok(output) => Ok(InstallResult {
-            success: true,
-            message: format!("Node.js 安装成功！{}", output),
-            error: None,
-        }),
+        Ok(output) => {
+            // 验证安装
+            if get_node_version().is_some() {
+                Ok(InstallResult {
+                    success: true,
+                    message: format!("Node.js 安装成功！{}", output),
+                    error: None,
+                })
+            } else {
+                Ok(InstallResult {
+                    success: false,
+                    message: "Node.js 安装失败".to_string(),
+                    error: Some(output),
+                })
+            }
+        }
         Err(e) => Ok(InstallResult {
             success: false,
             message: "Node.js 安装失败".to_string(),
@@ -673,6 +699,7 @@ pub async fn open_install_terminal(install_type: String) -> Result<String, Strin
 }
 
 /// 打开终端安装 Node.js
+/// macOS 使用 nvm 方式安装，无需 sudo 权限
 async fn open_nodejs_install_terminal() -> Result<String, String> {
     if platform::is_windows() {
         // Windows: 打开 PowerShell 执行安装
@@ -704,30 +731,41 @@ Read-Host "按回车键关闭此窗口"
         shell::run_powershell_output(script)?;
         Ok("已打开安装终端".to_string())
     } else if platform::is_macos() {
-        // macOS: 静默执行安装，不弹出终端窗口
-        info!("[安装Node.js] macOS 静默安装模式...");
+        // macOS: 使用 nvm 安装，无需 sudo
+        info!("[安装Node.js] macOS nvm 安装模式...");
         
         let script = r#"
 set -e
 
-# 检查 Homebrew
-if ! command -v brew &> /dev/null; then
-    echo "正在安装 Homebrew..."
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+# nvm 安装脚本（无需 sudo，安装到用户目录）
+export NVM_DIR="$HOME/.nvm"
+
+# 检查 nvm 是否已安装
+if [ ! -d "$NVM_DIR" ]; then
+    echo "安装 nvm (Node Version Manager)..."
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
     
-    if [[ -f /opt/homebrew/bin/brew ]]; then
-        eval "$(/opt/homebrew/bin/brew shellenv)"
-    elif [[ -f /usr/local/bin/brew ]]; then
-        eval "$(/usr/local/bin/brew shellenv)"
-    fi
+    # 加载 nvm
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+else
+    # 加载已存在的 nvm
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 fi
 
-echo "正在安装 Node.js 22..."
-brew install node@22
-brew link --overwrite node@22 2>/dev/null || true
+# 验证 nvm 是否可用
+nvm --version
+
+# 安装 Node.js 22 LTS
+echo "使用 nvm 安装 Node.js 22..."
+nvm install 22
+nvm use 22
+nvm alias default 22
 
 # 验证安装
 node --version
+npm --version
+
+echo "Node.js 安装完成！安装目录: $(which node)"
 "#;
         
         match shell::run_bash_output(script) {
